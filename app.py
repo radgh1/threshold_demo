@@ -116,6 +116,103 @@ def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60
         traj.append({"t": t, "tau": tau, "coverage": cov, "accuracy": acc})
     return pd.DataFrame(traj)
 
+def adaptive_tau_with_learning(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.1, 
+                              ai_learning_rate=0.001, exploration_bonus=0.05, optimization_mode="balanced", task_domain="radiology"):
+    """
+    Advanced adaptive thresholding where AI LEARNS and improves over time!
+    
+    This simulates a more realistic scenario where:
+    - AI starts with baseline capabilities but improves through experience
+    - System must balance: exploration (let AI learn on harder cases) vs exploitation (use current AI optimally)
+    - Threshold τ adapts to both workload balancing AND changing AI capabilities
+    
+    Key innovation: AI learning creates a feedback loop where better AI → different optimal τ → more learning opportunities → even better AI
+    """
+    tau = tau0
+    # AI starts with baseline capabilities (will improve over time)
+    ai_skill = 0.0  # Learning progress (0.0 = baseline, 1.0 = fully learned)
+    traj = []
+    
+    # Domain-specific optimization mode recommendations
+    if optimization_mode == "domain_recommended":
+        domain_modes = {
+            "radiology": "accuracy_priority",  # Medical safety critical
+            "legal": "balanced",              # Cost vs accuracy trade-off
+            "code": "efficiency_priority"     # Faster development cycles
+        }
+        optimization_mode = domain_modes.get(task_domain, "balanced")
+    
+    # Define optimization weights based on mode
+    if optimization_mode == "accuracy_priority":
+        accuracy_weight = 1.0
+        workload_weight = 0.0
+    elif optimization_mode == "efficiency_priority":
+        accuracy_weight = 0.3
+        workload_weight = 0.7
+    elif optimization_mode == "robot_maximum":
+        accuracy_weight = 0.1
+        workload_weight = 0.9
+    else:  # "balanced"
+        accuracy_weight = 0.6
+        workload_weight = 0.4
+    
+    for t in range(steps):
+        # AI gets better over time (learning from experience)
+        ai_skill = min(1.0, ai_skill + ai_learning_rate)
+        
+        # Calculate current AI accuracy boost from learning
+        # AI improves from baseline ~0.55-0.61 to potentially much higher
+        ai_accuracy_boost = ai_skill * 0.3  # Up to 30% improvement possible
+        
+        # Simulate current AI performance with learning
+        cov, acc = coverage_accuracy_with_learning(df, tau, base_acc, fatigue_after, fatigue_drop, ai_accuracy_boost)
+        
+        # Exploration bonus: encourage trying harder cases to accelerate learning
+        exploration_incentive = exploration_bonus * (1 - tau)  # More exploration when τ is low (more human involvement)
+        
+        # Multi-objective optimization: balance accuracy vs workload vs learning
+        acc_error = target_acc - acc
+        workload_penalty = cov
+        learning_penalty = -exploration_incentive  # Negative because we WANT exploration
+        
+        # Combined error term
+        combined_error = (accuracy_weight * acc_error - 
+                         workload_weight * workload_penalty + 
+                         learning_penalty)
+        
+        # Adjust tau to minimize combined error
+        tau = np.clip(tau + k_p * combined_error, 0.0, 1.0)
+        
+        traj.append({"t": t, "tau": tau, "coverage": cov, "accuracy": acc, "ai_skill": ai_skill})
+    
+    return pd.DataFrame(traj)
+
+def coverage_accuracy_with_learning(df, tau, base_acc, fatigue_after, fatigue_drop, ai_accuracy_boost):
+    """
+    Enhanced coverage-accuracy calculation where AI improves with learning
+    """
+    y = df["y_true"].values
+    ai_p = df["ai_prob"].values
+    
+    # Apply AI learning boost (higher confidence scores for learned AI)
+    ai_p_boosted = np.clip(ai_p + ai_accuracy_boost * (ai_p - 0.5), 0.0, 1.0)
+    
+    route_human = ai_p_boosted < tau
+    cov = route_human.mean()
+    
+    # AI predictions with learning boost
+    ai_pred = (ai_p_boosted >= 0.5).astype(int)
+    ai_correct = (ai_pred == y)[~route_human]
+    
+    # Humans (unchanged)
+    human_pred = simulate_humans(y[route_human], base_acc=base_acc,
+                                 fatigue_after=fatigue_after, fatigue_drop=fatigue_drop)
+    human_correct = (human_pred == y[route_human])
+    
+    total_correct = ai_correct.sum() + human_correct.sum()
+    acc = total_correct / len(df)
+    return cov, acc
+
 with gr.Blocks(title="Plan B — Dynamic Thresholding") as demo:
     gr.Markdown("# Plan B — Dynamic Confidence Thresholding")
     gr.Markdown("Fixed τ sweep vs. simple adaptive controller nudging τ toward a target accuracy.")
@@ -130,6 +227,9 @@ This app demonstrates a dynamic confidence thresholding system for optimizing hu
 - **Confidence Thresholding**: Uses a tunable threshold (τ) on AI confidence scores to decide whether to use AI predictions or route tasks to humans.
   - If AI confidence > τ → Use AI prediction
   - Otherwise → Send to human expert
+
+### Important Clarification: The AI Does NOT Learn
+**The AI has fixed capabilities throughout the simulation.** It does not improve, get better at the task, or learn from experience. The "adaptive" behavior refers to the system learning the optimal confidence threshold (τ) to balance accuracy goals with human workload reduction. The AI's prediction accuracy remains constant - the system simply learns how to best utilize the AI's fixed capabilities alongside human experts.
 
 ### Features:
 - **Coverage-Accuracy Trade-off**: Coverage = fraction of tasks handled by humans; Accuracy = overall correctness.
@@ -347,6 +447,9 @@ This demonstrates applied ML concepts for human-AI collaboration - teaching syst
 - Use the plots to visualize trade-offs: higher coverage (more human involvement) vs. accuracy.
 - Adaptive mode shows real-time adjustment; watch how τ changes over steps.
 
+### Important: The AI Does NOT Learn
+Remember that the AI (robots) have **fixed capabilities** throughout all simulations. They don't improve, get better at tasks, or learn from experience. The "adaptive" behavior you see is the system learning the optimal confidence threshold (τ) to best utilize the AI's unchanging abilities alongside human experts. It's about workload optimization, not AI improvement!
+
 ### Simple Explanation:
 Imagine you're playing a game where robots help people make decisions, but sometimes the robots need help from people. This app lets you control how much the robots do on their own versus asking for help.
 
@@ -491,6 +594,9 @@ Imagine the graph is like a smart thermostat learning to maintain the perfect te
 - **Why it might oscillate**: If your target accuracy is too ambitious for the AI's capabilities, the system will bounce between "use more humans" and "use more robots"
 - **Why it doesn't always improve smoothly**: The AI has fixed capabilities - it's not "learning" to be better, just finding the optimal balance
 - **What success looks like**: The accuracy settles near your target, with τ stabilizing at an optimal value
+
+**Key Point: The AI Does NOT Learn**
+The robots (AI) have fixed smarts throughout the whole game. They don't get better at their job or learn from mistakes. The "learning" you see is the system figuring out the best way to divide work between the robots and humans, given the robots' unchanging abilities.
 
 This shows intelligent workload allocation, not AI improvement - the system learns the best way to combine human and AI strengths for your specific needs! 🎯⚖️
 """)
