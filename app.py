@@ -144,7 +144,6 @@ This framework supports the transition to more integrated human-AI workflows, en
 
 #### Configuration
 - requirements.txt - Dependency management
-- .gitignore - Version control exclusions (venv, tokens, etc.)
 
 ### Key Design Patterns
 - Functional Programming - Pure functions for simulation and data processing
@@ -206,7 +205,7 @@ This approach makes advanced ML concepts accessible for research, education, and
 - Adaptive mode shows real-time adjustment; watch how τ changes over steps.
 
 ### Simple Explanation:
-Imagine you're playing a game where robots help people make decisions, but sometimes the robots need help from smart grown-ups. This app lets you control how much the robots do on their own versus asking for help.
+Imagine you're playing a game where robots help people make decisions, but sometimes the robots need help from people. This app lets you control how much the robots do on their own versus asking for help.
 
 Here's what the buttons and sliders do, explained super simply:
 
@@ -214,16 +213,16 @@ Here's what the buttons and sliders do, explained super simply:
 
 - **Dataset Size**: How many pretend tasks to try. Bigger numbers mean more practice, like doing 100 math problems instead of 10.
 
-- **Human Base Accuracy**: How good the grown-up helpers are at first. Slide it up for super-smart helpers, down for ones who make more mistakes.
+- **Human Base Accuracy**: How good the humans are at first. Slide it up for super-smart humans, down for ones who make more mistakes.
 
-- **Fatigue After N Tasks**: After how many tasks the helpers get tired and make more mistakes. Like how you get sleepy after playing too long.
+- **Fatigue After N Tasks**: After how many tasks the humans get tired and make more mistakes. Like how you get sleepy after playing too long.
 
-- **Fatigue Accuracy Drop**: How much worse the helpers get when tired. A little drop means they still do okay; a big drop means they mess up a lot.
+- **Fatigue Accuracy Drop**: How much worse the humans get when tired. A little drop means they still do okay; a big drop means they mess up a lot.
 
 In the "Fixed τ Sweep" tab:
 - **τ Min/Max**: The lowest and highest "confidence" levels where robots decide alone. τ is like a bravery meter – higher means robots try harder on their own.
 - **τ Step**: How much to change the bravery meter each time.
-- **Compute Curve**: Press this to see a picture showing how well the robots and helpers work together at different bravery levels.
+- **Compute Curve**: Press this to see a picture showing how well the robots and humans work together at different bravery levels.
 
 In the "Adaptive τ Controller" tab:
 - **Target Accuracy**: How good you want the whole team to be. Like aiming for 90% right answers.
@@ -256,11 +255,11 @@ Imagine the graph is like a treasure map showing how well robots and people work
 
 - The **y-axis** (side) is "Accuracy." It shows how many answers are right. Higher up means more correct answers, like getting a good score on a test.
 
-- Each colored line is for a different "bravery level" (called τ). Braver robots (higher τ) try to do more on their own, so coverage is lower (less help from people), but accuracy might go up or down depending on how good the robots are.
+- The curve connects points for different "bravery levels" (called τ). It starts from low τ (robots ask for lots of help, high coverage) on the left, to high τ (robots try to do more on their own, low coverage) on the right.
 
-The graph helps you see the trade-off: more robot work (lower coverage) might make fewer mistakes (higher accuracy) if robots are smart, but if robots mess up, you need more people to help (higher coverage) to get things right.
+The graph helps you see the trade-off: more robot work (moving right on the curve) might make fewer mistakes (higher accuracy) if robots are smart, but if robots mess up, you need more people to help (moving left) to get things right.
 
-It's like balancing a seesaw – too much on one side, and it tips! Play with the sliders to see how the lines change. Cool, right? 😊
+It's like balancing a seesaw – too much on one side, and it tips! Play with the sliders to see how the curve changes. Cool, right? 😊
 """)
 
         curve_plot = gr.LinePlot(x="coverage", y="accuracy", label="Coverage–Accuracy Curve")
