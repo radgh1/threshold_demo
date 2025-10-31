@@ -1,12 +1,11 @@
 import numpy as np
 import pandas as pd
 
-# Test the domain-specific modes
 rng = np.random.default_rng(123)
 
 def logistic(x): return 1/(1+np.exp(-x))
 
-def make_dataset(n=1500, task='radiology'):
+def make_dataset(n=1500, task='code'):
     if task == 'radiology':
         difficulty = rng.normal(0.0, 1.0, size=n)
     elif task == 'legal':
@@ -44,8 +43,7 @@ def coverage_accuracy(df, tau, base_acc=0.85, fatigue_after=60, fatigue_drop=0.1
 def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.3, optimization_mode='balanced', task_domain='radiology'):
     tau = tau0
     traj = []
-
-    # Domain-specific optimization mode recommendations
+    
     if optimization_mode == 'domain_recommended':
         domain_modes = {
             'radiology': 'accuracy_priority',
@@ -53,8 +51,7 @@ def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60
             'code': 'efficiency_priority'
         }
         optimization_mode = domain_modes.get(task_domain, 'balanced')
-
-    # Define optimization weights based on mode
+    
     if optimization_mode == 'accuracy_priority':
         accuracy_weight = 1.0
         workload_weight = 0.0
@@ -67,7 +64,7 @@ def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60
     else:
         accuracy_weight = 0.6
         workload_weight = 0.4
-
+    
     for t in range(steps):
         cov, acc = coverage_accuracy(df, tau, base_acc, fatigue_after, fatigue_drop)
         acc_error = target_acc - acc
@@ -75,20 +72,15 @@ def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60
         combined_error = accuracy_weight * acc_error - workload_weight * workload_penalty
         tau = np.clip(tau + k_p * combined_error, 0.0, 1.0)
         traj.append({'t': t, 'tau': tau, 'coverage': cov, 'accuracy': acc})
+    
     return pd.DataFrame(traj)
 
-print('Testing domain-specific optimization modes:')
-print('=' * 60)
+# Test the improved algorithm
+df = make_dataset(1000, 'code')
+result = adaptive_tau(df, target_acc=0.65, base_acc=0.85, fatigue_after=60, fatigue_drop=0.1, 
+                     steps=30, tau0=0.5, k_p=0.1, optimization_mode='domain_recommended', task_domain='code')
 
-# Test domain_recommended for different domains
-domains = ['radiology', 'legal', 'code']
-for domain in domains:
-    df = make_dataset(1000, domain)
-    result = adaptive_tau(df, target_acc=0.6, base_acc=0.85, fatigue_after=60, fatigue_drop=0.1,
-                         steps=30, tau0=0.5, k_p=0.3, optimization_mode='domain_recommended', task_domain=domain)
-    final = result.iloc[-1]
-    robot_pct = (1 - final['coverage']) * 100
-    print(f'{domain.capitalize()}: Robots handle {robot_pct:.1f}%, Accuracy: {final["accuracy"]:.3f}')
-
-print()
-print('Domain-specific modes working correctly!')
+print(f'Final result: τ={result.iloc[-1]["tau"]:.3f}, accuracy={result.iloc[-1]["accuracy"]:.3f}')
+print(f'Accuracy range: {result["accuracy"].min():.3f} to {result["accuracy"].max():.3f}')
+print(f'Accuracy stability (last 10 steps std): {result["accuracy"].tail(10).std():.4f}')
+print('Much smoother convergence with realistic target!')

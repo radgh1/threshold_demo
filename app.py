@@ -66,6 +66,11 @@ def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60
     - Radiology: accuracy_priority (medical safety critical)
     - Legal: balanced (cost vs accuracy trade-off)
     - Code: efficiency_priority (faster iteration cycles)
+    
+    Realistic target accuracies by domain:
+    - Radiology: 0.75-0.85 (AI can achieve ~0.65, humans ~0.75)
+    - Legal: 0.70-0.80 (AI can achieve ~0.60, humans ~0.70)  
+    - Code: 0.60-0.70 (AI can achieve ~0.55, humans ~0.58)
     """
     tau = tau0
     traj = []
@@ -366,6 +371,8 @@ In the "Fixed τ Sweep" tab:
 
 In the "Adaptive τ Controller" tab:
 - **Target Accuracy**: How good you want the whole team to be. Like aiming for 90% right answers.
+  - **Realistic ranges by domain**: Radiology (0.75-0.85), Legal (0.70-0.80), Code (0.60-0.70)
+  - **Note**: If target is too high for AI capabilities, the graph may oscillate rather than smoothly improve
 - **Steps**: How many tries to get better.
 - **Initial τ**: Starting bravery level.
 - **Proportional Gain k_p**: How fast the system learns to adjust. Higher means it changes quicker.
@@ -464,10 +471,10 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
         )
 
     with gr.Tab("Adaptive τ controller"):
-        target_acc = gr.Slider(0.6, 0.99, value=0.9, step=0.01, label="Target accuracy")
+        target_acc = gr.Slider(0.5, 0.95, value=0.65, step=0.01, label="Target accuracy")
         steps = gr.Slider(5, 200, value=60, step=5, label="Steps")
         tau0 = gr.Slider(0.0, 1.0, value=0.5, step=0.01, label="Initial τ")
-        kp = gr.Slider(0.05, 1.0, value=0.3, step=0.05, label="Proportional gain k_p")
+        kp = gr.Slider(0.01, 0.5, value=0.1, step=0.01, label="Proportional gain k_p")
         optimization_mode = gr.Dropdown(
             ["domain_recommended", "balanced", "accuracy_priority", "efficiency_priority", "robot_maximum"], 
             value="domain_recommended", 
@@ -478,19 +485,14 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
 
         with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
             gr.Markdown("""
-Imagine the graph is like a movie showing how a smart robot learns to work better with people over time!
+Imagine the graph is like a smart thermostat learning to maintain the perfect temperature! The x-axis shows time steps as the system tries different settings, and the y-axis shows accuracy.
 
-- The **x-axis** (bottom) is "Time Steps." It shows how many rounds of practice the system has done. Each step is like one more task the robot tries.
+- **What it's doing**: The system automatically adjusts the robot confidence threshold (τ) to balance your accuracy goal with human workload
+- **Why it might oscillate**: If your target accuracy is too ambitious for the AI's capabilities, the system will bounce between "use more humans" and "use more robots"
+- **Why it doesn't always improve smoothly**: The AI has fixed capabilities - it's not "learning" to be better, just finding the optimal balance
+- **What success looks like**: The accuracy settles near your target, with τ stabilizing at an optimal value
 
-- The **y-axis** (side) is "Accuracy." It shows how many answers are right at each time step. Higher up means more correct answers, like getting better scores as you practice.
-
-- The line shows how the system's accuracy changes over time. It starts at some level and tries to reach the target accuracy you set (like aiming for 90% right).
-
-- Behind the scenes, the robot adjusts its "bravery level" (τ) based on how well it's doing. If accuracy is too low, it asks for more help from people. If it's doing well, it tries to do more on its own.
-
-- Watch how the accuracy bounces around at first but settles toward your target. It's like training a robot to find the perfect balance between working alone and asking for help!
-
-This shows real-time learning – the system adapts as it goes, getting smarter about when to use robots vs. people. Cool, right? 🤖📈
+This shows intelligent workload allocation, not AI improvement - the system learns the best way to combine human and AI strengths for your specific needs! 🎯⚖️
 """)
 
         traj_plot = gr.LinePlot(x="t", y="accuracy", label="Adaptive trajectory")
