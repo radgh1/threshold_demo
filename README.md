@@ -4,7 +4,40 @@ An interactive web application demonstrating dynamic confidence thresholding sys
 
 ## Description
 
-This app simulates "Plan B", a flexible mechanism for balancing AI efficiency and human expert coverage through adjustable confidence thresholds. It explores the trade-off between coverage (human involvement) and accuracy in scenarios like medical diagnosis, legal review, and code analysis.
+This interactive web application demonstrates **dynamic confidence thresholding systems** for optimizing the collaboration between AI systems and human experts in decision-making tasks. The core concept is "Plan B" - a flexible mechanism that balances AI efficiency with human expert coverage through adjustable confidence thresholds.
+
+### What the App Does
+
+The application simulates real-world scenarios where AI systems make predictions with associated confidence scores. When AI confidence falls below a threshold, tasks are routed to human experts for review. This creates a trade-off between:
+
+- **Coverage**: The percentage of tasks reviewed by humans (higher coverage = more human involvement)
+- **Accuracy**: Overall system accuracy (balancing AI and human performance)
+
+### Three Main Simulation Modes
+
+1. **Fixed τ Sweep**: Analyzes how different static confidence thresholds affect coverage and accuracy across various task domains
+2. **Adaptive τ Controller**: Dynamically adjusts thresholds in real-time to maintain target accuracy levels while minimizing human workload
+3. **Learning AI Controller**: Shows how AI systems can learn and adapt their confidence calibration over time through interaction with human feedback
+
+### Educational Value
+
+The app serves as an educational tool for understanding:
+- Human-AI collaboration dynamics
+- Confidence calibration in machine learning
+- Workload distribution optimization
+- The impact of human fatigue on system performance
+- Adaptive algorithms in real-world applications
+
+### Real-World Applications
+
+This simulation applies to domains like:
+- Medical diagnosis (AI-assisted radiology)
+- Legal document review
+- Code quality analysis
+- Financial risk assessment
+- Content moderation
+
+The app uses mathematical models rather than actual ML training, making it fast, reproducible, and perfect for educational demonstrations.
 
 ### Key Features
 - **Fixed Threshold Sweep**: Analyze coverage-accuracy trade-offs across different confidence levels
