@@ -481,10 +481,10 @@ Here's what the buttons and sliders do, explained super simply:
 
 - **Fatigue Accuracy Drop**: How much worse the humans get when tired. A little drop means they still do okay; a big drop means they mess up a lot.
 
-In the "Fixed τ Sweep" tab:
+In the "Fixed τ sweep" tab:
 - **τ Min/Max**: The lowest and highest "confidence" levels where robots decide alone. τ is like a bravery meter – higher means robots try harder on their own.
 - **τ Step**: How much to change the bravery meter each time.
-- **Compute Curve**: Press this to see a picture showing how well the robots and humans work together at different bravery levels.
+- **Compute Curve**: Press this to see a picture showing how well the robots and people work together at different bravery levels.
 
 In the "Adaptive τ Controller" tab:
 - **Target Accuracy**: How good you want the whole team to be. Like aiming for 90% right answers.
@@ -520,8 +520,8 @@ Unlike the Adaptive tab where robots have fixed abilities, here the robots actua
 4. **Cycle repeats** creating virtuous improvement loops!
 
 **The two plots show:**
-- **Left plot (Accuracy)**: How well the human-robot team performs over time
-- **Right plot (AI Skill)**: How much the robots improve from 0% to potentially much higher skill levels
+- **Top plot (Accuracy)**: How well the human-robot team performs over time
+- **Bottom plot (AI Skill)**: How much the robots improve from 0% to potentially much higher skill levels
 
 This demonstrates the future of AI - systems that both optimize workload allocation AND genuinely improve through experience!
 
@@ -678,7 +678,7 @@ Imagine the graph is like a smart thermostat learning to maintain the perfect te
 - **Direction**: Left = start of simulation, right = end of simulation
 
 **Y-Axis (Accuracy) - Left side:**
-- **What it measures**: The overall team accuracy (robots + humans combined) at each time step
+- **What it measures**: The overall team accuracy (robots + humans) at each time step
 - **What it represents**: How well the human-AI system is performing
 - **Scale**: 0.0 to 1.0 (0% to 100% correct decisions)
 - **Target line**: The horizontal line at your target accuracy (what you're trying to achieve)
@@ -706,7 +706,7 @@ This shows intelligent workload allocation - the system continuously learns the 
 
 **🤔 Simple Explanation: Imagine you're10-year-old: Imagine a robot learning to share toys fairly!**
 
-The graph shows how a robot learns to share work with you over time, like when you and a friend take turns doing chores:
+The graph shows how well you and the robot work together over time, like when you and a friend take turns doing chores:
 
 - **Bottom line (Time Steps)**: How long you've been working together
   - Left side = just started working together
@@ -714,11 +714,9 @@ The graph shows how a robot learns to share work with you over time, like when y
 
 - **Left line (Accuracy)**: How well you both do your jobs together
   - Bottom = making lots of mistakes (needs more practice!)
-  - Top = doing great work (high five! ✋)
+  - Top = almost all answers are right (yay!)
 
-The robot starts by trying to do some work alone and asking you to check the rest. If you both make too many mistakes, the robot asks for more of your help. If you both do really well, the robot tries to do more work by itself.
-
-It's like the robot is learning the perfect way to share the work so you both get good grades! The line should get nice and steady near your goal line, showing you've found the perfect teamwork balance. Sometimes the starting teamwork is better or worse than your goal - the robot learns to adjust to hit your target! 🤝📈
+The curvy line is like a treasure map showing the best way to work together. At first, the robot needs your help with most decisions (high τ). But as it learns and gets better, it can handle more on its own (low τ). The goal is to find the perfect balance where you both do your best! 🤝🤖
 """)
 
         with gr.Accordion("📊 Graph: Adaptive Trajectory - How the System Optimizes", open=False):
@@ -839,25 +837,25 @@ This graph reveals **how well the system learns to optimize workload sharing**. 
 
 ---
 
-**🤔 Simple Explanation: Robot Learning to Share Work Report!**
+**🤔 Simple Explanation: Robot Homework Team Report!**
 
 The computer watched how a robot learned to share work with you over time:
 
 **Final Team Setup:**
 - **Team Grade**: You both got {final_acc:.0%} of answers right together!
-- **Robot Work**: The robot does {robot_autonomy:.0%} of all the problems by itself
+- **Robot Work**: The robot does {robot_autonomy:.0%} of all problems by itself
 - **Your Work**: You check {final_coverage:.0%} of the robot's answers
 - **Team Stability**: {'Very steady teamwork!' if stability < 0.01 else 'Learning to work together smoothly'}
 
 **Learning Story:**
-- **Started With**: {initial_acc:.0%} correct answers (needed practice!)
+- **Started With**: {initial_acc:.0%} correct answers
 - **Best Moment**: Got {max_acc:.0%} right at the peak
 - **Final Balance**: Robot learned it can safely do {robot_autonomy:.0%} of work while keeping your goal grade
 
 **What Happened:**
-- **Goal Achievement**: {'Perfect! Hit your target grade!' if converged else f'Close! Got {final_acc:.0%} - almost your goal'}
-- **Robot Learning**: Started asking for help, then learned when to work alone
-- **Teamwork**: {'Always worked smoothly together' if stability < 0.01 else 'Figured out the best way to share work'}
+- **Careful Start**: System started with humans doing most checks (high τ)
+- **Learning Boost**: As robot learned, τ increased → robots did more work
+- **Smooth Collaboration**: By end, robots handle {robot_autonomy:.0%} of decisions confidently
 
 **Real Life Meaning:**
 - The robot learned the perfect way to share homework with you
@@ -933,13 +931,13 @@ This demonstrates the future of AI - systems that don't just optimize, but genui
 
 You see TWO graphs side by side, like watching a friend learn to ride a bike AND do homework at the same time:
 
-**Left Graph (Teamwork Grade):**
+**Top Graph (Teamwork Grade):**
 - **Bottom line (Time)**: How long you've been practicing together
 - **Left line (Grade)**: How well you both do your work as a team
   - Bottom = lots of mistakes (needs more practice!)
-  - Top = getting almost everything right (awesome team!)
+  - Top = getting almost everything right (high five! ✋)
 
-**Right Graph (Robot's Bike Skills):**
+**Bottom Graph (Robot's Bike Skills):**
 - **Bottom line (Time)**: Same timeline as the left graph
 - **Left line (Skills)**: How good the robot is getting at riding the bike
   - Bottom = just learning, falls down a lot (0% skills)
@@ -949,19 +947,11 @@ At first, the robot is wobbly on the bike (low skills) so you have to help with 
 
 Sometimes the robot tries harder tricks to learn faster (that's the "exploration bonus"), and the system adjusts how you share the work, which can cause the teamwork grade to go up and down for a bit as everyone learns the best balance. But over time, with the robot getting smarter, you both should get better at working together overall! The teamwork grade may fluctuate during learning, but the trend should improve as the robot becomes a biking expert!
 
-It's like having a friend who gets smarter at sports while also getting better at helping you with homework. The robot doesn't just share the work - it actually improves and gets stronger, creating a super team! 🚴‍♂️🤝📚
+It's like having a friend who gets smarter at sports while also getting better at helping you with homework. The robot doesn't just share the work - it learns to ride the bike AND gets better at deciding when to ask for help! 🚴‍♂️🤝📚
 """)
 
-        learning_traj_plot = gr.LinePlot(x="t", y="accuracy", label="Accuracy over time")
-        learning_skill_plot = gr.LinePlot(x="t", y="ai_skill", label="AI skill progression")
-        learning_traj_table = gr.Dataframe(interactive=False)
-        learning_interpret_btn = gr.Button("Interpret Results")
-        learning_adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the learning AI trajectory.")
-
-        with gr.Row():
-            with gr.Column():
-                with gr.Accordion("📊 Left Graph: Accuracy Over Time - What It Shows", open=False):
-                    gr.Markdown("""
+        with gr.Accordion("📊 Graph: Accuracy Over Time - What It Shows", open=False):
+            gr.Markdown("""
 ### The Left Graph: How Well Your Team Works Together
 
 **What You're Looking At:**
@@ -993,11 +983,15 @@ At first, accuracy might be **lower** than the fixed AI mode (Adaptive tab) beca
 **Key Takeaway:**
 This graph shows the **team accuracy story** - how working together and learning together affects overall performance. The goal is to stabilize near your target while the AI improves! 🎯
 """)
-                learning_traj_plot
 
-            with gr.Column():
-                with gr.Accordion("🤖 Right Graph: AI Skill Progression - How the Robot Learns", open=False):
-                    gr.Markdown("""
+        gr.Markdown("---")
+        gr.Markdown("### 📈 Graph 1: Accuracy Over Time")
+        with gr.Row():
+            learning_traj_plot = gr.LinePlot(x="t", y="accuracy", label="Accuracy over time")
+
+        gr.Markdown("---")
+        with gr.Accordion("🤖 Right Graph: AI Skill Progression - How the Robot Learns", open=False):
+            gr.Markdown("""
 ### The Right Graph: How Smart Is Your AI Robot Getting?
 
 **What You're Looking At:**
@@ -1008,8 +1002,8 @@ This graph shows how much the AI robot has learned and improved through experien
   - Left = beginning (robot is a newbie)
   - Right = end (robot has learned a lot)
 - **Left (Y-axis)**: AI Skill Level from 0% to 100%
-  - Bottom (0%) = baseline abilities, no learning yet
-  - Top (100%) = fully learned, maximum improvement possible
+  - Bottom = just learning, falls down a lot (0% skills)
+  - Top = riding smoothly without training wheels (100% skills!)
 
 **What This Tells You:**
 - 🚀 **Steady Upward Line**: Robot is consistently learning from experience
@@ -1039,7 +1033,19 @@ Better Robot Skill ↔ Different Optimal τ ↔ More Learning Opportunities ↔ 
 **Key Takeaway:**
 This graph shows **genuine AI improvement** - not just optimizing the threshold τ, but actually making the AI smarter through experience. This is what real production ML systems do! 🚀🧠
 """)
-                learning_skill_plot
+
+        gr.Markdown("---")
+        gr.Markdown("### 📊 Graph 2: AI Skill Progression")
+        with gr.Row():
+            learning_skill_plot = gr.LinePlot(x="t", y="ai_skill", label="AI skill progression")
+
+        gr.Markdown("---")
+        gr.Markdown("### 📋 Results Table")
+        learning_traj_table = gr.Dataframe(interactive=False)
+
+        gr.Markdown("---")
+        learning_interpret_btn = gr.Button("Interpret Results")
+        learning_adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the learning AI trajectory.")
 
         def on_learning_adapt(task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, ai_learning_rate, exploration_bonus):
             df = make_dataset(int(dataset_size), task)
@@ -1125,7 +1131,7 @@ The computer watched an amazing story: a robot learning to ride a bike WHILE lea
 - **Team Magic**: Better robot → different work sharing → more practice → even better robot!
 - **Learning Balance**: {'Always worked smoothly' if stability < 0.01 else 'Found the perfect learning rhythm'}
 
-**Real Life Magic:**
+**Real Life Meaning:**
 - The robot actually got smarter by practicing with you!
 - The robot learned to balance being independent (high bravery) with asking for help (to learn faster)
 - You created a friendship where both friends get better together!
