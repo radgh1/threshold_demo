@@ -958,69 +958,6 @@ It's like having a friend who gets smarter at sports while also getting better a
         learning_interpret_btn = gr.Button("Interpret Results")
         learning_adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the learning AI trajectory.")
 
-        with gr.Accordion("📊 Graph: Adaptive Trajectory - How the System Optimizes", open=False):
-            gr.Markdown("""
-### Understanding the Learning AI Adaptive Threshold Graph
-
-**What You're Looking At:**
-This graph shows how the system dynamically adjusts the robot confidence threshold (τ) over time while the AI is learning and improving. It's like watching a smart thermostat learn to set the perfect temperature while the heating system itself gets better!
-
-**The Axes:**
-- **Bottom (X-axis)**: Time steps from 0 to your "Steps" setting (default 60)
-  - Left = beginning of optimization
-  - Right = end of optimization
-- **Left (Y-axis)**: System Accuracy from 0% to 100%
-  - Bottom = poor performance (high errors)
-  - Top = excellent performance (very accurate)
-
-**The Key Reference Line:**
-There's usually a horizontal line at your **target accuracy** (the goal you set). The graph shows:
-- ✅ **Success**: When the accuracy line settles AT or VERY CLOSE to your target
-- 📈 **Improvement**: When the line moves upward toward your target
-- ⚖️ **Balancing**: When the line fluctuates as the system learns optimal work-sharing
-
-**What's Happening Behind the Scenes:**
-At each time step, the system:
-1. **AI improves** through experience (skill increases over time)
-2. **Tests 7 nearby τ values** (delta_tau: -0.1, -0.05, -0.02, 0.0, 0.02, 0.05, 0.1)
-3. **Measures accuracy** at each threshold with the current AI skill level
-4. **Selects the best one** (highest accuracy, lowest human workload if tied)
-5. **Updates τ** and moves to the next step
-
-This **direct search strategy** guarantees monotonic improvement - the line should never go down!
-
-**Why Accuracy Patterns Look Different:**
-- 📊 **Smooth Climb**: τ is consistently improving → finding better thresholds
-- 🏔️ **Hockey Stick**: Quick improvement then plateau → found optimal τ for current AI skill
-- 🎯 **Early Convergence**: Line flattens quickly → optimal threshold found fast
-
-**Important Insight About the "Hockey Stick":**
-You might notice the accuracy improves quickly, then flattens out. This is **expected and correct** because:
-- The system is working with a **fixed dataset** of 1,500 tasks
-- Once it finds the optimal τ for that dataset and current AI skill, no further improvements are possible
-- All 7 candidate τ values become equally good
-- This demonstrates convergence to a local optimum
-
-This is **educational and intentional** - it shows how algorithms work with finite data!
-
-**Your Control Parameters:**
-- **Target Accuracy**: The horizontal reference line (what you're trying to hit)
-- **Proportional Gain (k_p)**:
-  - Higher values = faster adjustment (might overshoot target)
-  - Lower values = slower adjustment (gradual approach)
-  - Sweet spot: 0.05-0.1 for stable convergence
-- **Initial τ**: Starting point of optimization
-  - τ = 0.5 is a reasonable middle ground
-  - τ = 0.8 starts aggressively (robots do more)
-  - τ = 0.2 starts conservatively (humans do more)
-- **AI Learning Rate**: How fast the AI improves
-  - Higher = faster AI improvement (may cause more fluctuation)
-  - Lower = slower AI improvement (more stable optimization)
-
-**Key Takeaway:**
-This graph reveals **how well the system learns to optimize workload sharing while AI improves**. The algorithm tests nearby thresholds and greedily selects improvements, creating a direct path to optimal human-AI collaboration for your accuracy goal! 🎯
-""")
-
         with gr.Row():
             with gr.Column():
                 with gr.Accordion("📊 Left Graph: Accuracy Over Time - What It Shows", open=False):
