@@ -938,7 +938,7 @@ You see TWO graphs side by side, like watching a friend learn to ride a bike AND
   - Top = getting almost everything right (high five! ✋)
 
 **Bottom Graph (Robot's Bike Skills):**
-- **Bottom line (Time)**: Same timeline as the left graph
+- **Bottom line (Time)**: Same timeline as the top graph
 - **Left line (Skills)**: How good the robot is getting at riding the bike
   - Bottom = just learning, falls down a lot (0% skills)
   - Top = riding smoothly without training wheels (100% skills!)
@@ -952,7 +952,7 @@ It's like having a friend who gets smarter at sports while also getting better a
 
         with gr.Accordion("📊 Graph: Accuracy Over Time - What It Shows", open=False):
             gr.Markdown("""
-### The Left Graph: How Well Your Team Works Together
+### The Top Graph: How Well Your Team Works Together
 
 **What You're Looking At:**
 This graph shows how accurately you and the AI robot work together over 60 time steps (decisions). It's like watching your grades improve as you and a friend get better at studying together.
@@ -990,9 +990,9 @@ This graph shows the **team accuracy story** - how working together and learning
             learning_traj_plot = gr.LinePlot(x="t", y="accuracy", label="Accuracy over time")
 
         gr.Markdown("---")
-        with gr.Accordion("🤖 Right Graph: AI Skill Progression - How the Robot Learns", open=False):
+        with gr.Accordion("🤖 Bottom Graph: AI Skill Progression - How the Robot Learns", open=False):
             gr.Markdown("""
-### The Right Graph: How Smart Is Your AI Robot Getting?
+### The Bottom Graph: How Smart Is Your AI Robot Getting?
 
 **What You're Looking At:**
 This graph shows how much the AI robot has learned and improved through experience. It's like watching a student improve from 0% mastery to 100% mastery of a subject!
