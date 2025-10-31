@@ -375,17 +375,22 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
             balanced = curve_df.iloc[len(curve_df)//2]  # Middle point
             
             interpretation = f"""
-## Coverage-Accuracy Curve Analysis
+## Human vs Robot Decision-Making Analysis
 
-**Key Insights:**
-- **Maximum Accuracy**: {max_acc['accuracy']:.3f} at τ = {max_acc['tau']:.3f} (coverage: {max_acc['coverage']:.3f})
-- **Minimum Coverage**: {min_cov['coverage']:.3f} at τ = {min_cov['tau']:.3f} (accuracy: {min_cov['accuracy']:.3f})
-- **Balanced Point**: τ = {balanced['tau']:.3f} gives accuracy {balanced['accuracy']:.3f} with coverage {balanced['coverage']:.3f}
+**Key Operating Points:**
+- **Maximum Accuracy**: {max_acc['accuracy']:.3f} when robots handle {1-max_acc['coverage']:.1%} of decisions (τ = {max_acc['tau']:.3f})
+- **Maximum Robot Autonomy**: Robots handle {1-min_cov['coverage']:.1%} of decisions with {min_cov['accuracy']:.3f} accuracy (τ = {min_cov['tau']:.3f})
+- **Balanced Approach**: τ = {balanced['tau']:.3f} gives {balanced['accuracy']:.3f} accuracy with robots handling {1-balanced['coverage']:.1%} of tasks
 
-**Interpretation:**
-- As τ increases from 0 to 1, coverage decreases (fewer tasks go to humans) while accuracy typically improves initially then may stabilize or decline.
-- The optimal τ depends on your priorities: high accuracy (higher τ) vs. workload management (lower τ).
-- This curve shows the fundamental trade-off between human involvement and system performance.
+**Human vs Robot Dynamics:**
+- **Low τ (Conservative)**: Robots ask humans for help on most decisions. High human involvement ensures accuracy but increases workload.
+- **High τ (Aggressive)**: Robots make most decisions independently. Lower human workload but potential accuracy trade-offs.
+- **Optimal Balance**: The "sweet spot" depends on your priorities - do you value accuracy (more human oversight) or efficiency (more robot autonomy)?
+
+**Practical Implications:**
+- If human experts are expensive/rare: Choose higher τ to maximize robot utilization
+- If accuracy is critical: Choose lower τ to ensure human review of complex cases
+- The curve shows how robot confidence thresholds affect the human-robot collaboration balance.
 """
             return interpretation
 
@@ -451,22 +456,36 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
             last_10 = traj_df['accuracy'].tail(10)
             stability = last_10.std()
             
+            # Calculate robot autonomy (1 - coverage)
+            final_coverage = traj_df['coverage'].iloc[-1]
+            robot_autonomy = 1 - final_coverage
+            
             interpretation = f"""
-## Adaptive Trajectory Analysis
+## Adaptive Human-Robot Collaboration Analysis
 
-**Target Accuracy**: {float(target_acc):.3f}
-**Final Results:**
-- **Final Accuracy**: {final_acc:.3f}
-- **Final τ**: {final_tau:.3f}
-- **Accuracy Range**: {min_acc:.3f} to {max_acc:.3f}
-- **Convergence**: {'Achieved' if converged else 'Not fully achieved'}
-- **Stability** (last 10 steps std): {stability:.4f}
+**Target Performance**: {float(target_acc):.1%}
+**Final System Configuration:**
+- **Overall Accuracy**: {final_acc:.1%}
+- **Robot Decision-Making**: Robots handle {robot_autonomy:.1%} of all decisions (τ = {final_tau:.3f})
+- **Human Involvement**: Humans review {final_coverage:.1%} of cases
+- **System Stability**: {stability:.4f} (lower = more stable collaboration)
 
-**Interpretation:**
-- Started at accuracy {initial_acc:.3f}, evolved to {final_acc:.3f}
-- The system {'successfully converged to the target' if converged else f'approached the target but settled at {final_acc:.3f}'}
-- Higher stability values indicate more oscillation; lower k_p values may help
-- The final τ of {final_tau:.3f} represents the learned optimal threshold for this scenario
+**Learning Journey:**
+- **Starting Point**: {initial_acc:.1%} accuracy with initial robot confidence threshold
+- **Peak Performance**: {max_acc:.1%} accuracy achieved during adaptation
+- **Final Balance**: System learned that robots can safely handle {robot_autonomy:.1%} of decisions while maintaining target accuracy
+
+**Human-Robot Dynamics:**
+- **Convergence**: {'Successfully achieved target accuracy' if converged else f'Settled at {final_acc:.1%} - close but not exact target'}
+- **Adaptation Strategy**: The system continuously adjusted how much robots do vs. humans review
+- **Stability Insight**: {'Smooth collaboration' if stability < 0.01 else 'Some fluctuation in decision-sharing'}
+- **Learned Threshold**: τ = {final_tau:.3f} represents the optimal robot confidence level for this scenario
+
+**Practical Meaning:**
+- The system learned to balance robot efficiency with human oversight
+- Higher τ means robots are more confident and independent
+- Lower τ means robots seek more human guidance
+- The final configuration shows the ideal human-robot partnership for your accuracy requirements.
 """
             return interpretation
 
