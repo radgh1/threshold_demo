@@ -1,10 +1,10 @@
-# Plan B — Dynamic Confidence Thresholding Demo
+# Dynamic Confidence Thresholding Demo
 
 An interactive web application demonstrating dynamic confidence thresholding systems for optimizing human-AI workload distribution in decision-making tasks.
 
 ## Description
 
-This interactive web application demonstrates **dynamic confidence thresholding systems** for optimizing the collaboration between AI systems and human experts in decision-making tasks. The core concept is "Plan B" - a flexible mechanism that balances AI efficiency with human expert coverage through adjustable confidence thresholds.
+This interactive web application demonstrates **dynamic confidence thresholding systems** for optimizing the collaboration between AI systems and human experts in decision-making tasks. The core concept is a flexible mechanism that balances AI efficiency with human expert coverage through adjustable confidence thresholds.
 
 ### What the App Does
 

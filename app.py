@@ -204,8 +204,8 @@ def coverage_accuracy_with_learning(df, tau, base_acc, fatigue_after, fatigue_dr
     acc = total_correct / len(df)
     return cov, acc
 
-with gr.Blocks(title="Plan B — Dynamic Thresholding") as demo:
-    gr.Markdown("# Plan B — Dynamic Confidence Thresholding")
+with gr.Blocks(title="Dynamic Confidence Thresholding Demo") as demo:
+    gr.Markdown("# Dynamic Confidence Thresholding Demo")
     gr.Markdown("Fixed τ sweep vs. adaptive controller (fixed AI) vs. learning AI controller.")
 
     with gr.Accordion("About This App", open=False):
@@ -263,7 +263,7 @@ This framework supports the transition to more integrated human-AI workflows, en
 
     with gr.Accordion("Real-World Deployment: Data-Driven Parameter Optimization", open=False):
         gr.Markdown("""
-In real-world deployment of a dynamic confidence thresholding system like Plan B, data-driven parameter optimization would involve using empirical data from actual human-AI collaboration to fine-tune system parameters for optimal performance. Here's how this would work:
+In real-world deployment of a dynamic confidence thresholding system, data-driven parameter optimization would involve using empirical data from actual human-AI collaboration to fine-tune system parameters for optimal performance. Here's how this would work:
 
 ## Data Collection Phase
 1. **Deploy the system** in a pilot environment (e.g., medical diagnosis workflow or legal document review)
