@@ -355,6 +355,8 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
 
         curve_plot = gr.LinePlot(x="coverage", y="accuracy", label="Coverage–Accuracy Curve")
         curve_table = gr.Dataframe(interactive=False)
+        interpret_sweep_btn = gr.Button("Interpret Results")
+        sweep_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the coverage-accuracy curve.")
 
         def on_sweep(task, dataset_size, base_acc, fatigue_after, fatigue_drop, tmin, tmax, tstep):
             df = make_dataset(int(dataset_size), task)
@@ -362,10 +364,41 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
                                 float(tmin), float(tmax), float(tstep))
             curve = curve.sort_values("tau")
             return curve[["coverage","accuracy","tau"]], curve
+
+        def interpret_sweep_results(curve_df):
+            if curve_df.empty:
+                return "No data available. Please compute the curve first."
+            
+            # Find key points
+            max_acc = curve_df.loc[curve_df['accuracy'].idxmax()]
+            min_cov = curve_df.loc[curve_df['coverage'].idxmin()]
+            balanced = curve_df.iloc[len(curve_df)//2]  # Middle point
+            
+            interpretation = f"""
+## Coverage-Accuracy Curve Analysis
+
+**Key Insights:**
+- **Maximum Accuracy**: {max_acc['accuracy']:.3f} at τ = {max_acc['tau']:.3f} (coverage: {max_acc['coverage']:.3f})
+- **Minimum Coverage**: {min_cov['coverage']:.3f} at τ = {min_cov['tau']:.3f} (accuracy: {min_cov['accuracy']:.3f})
+- **Balanced Point**: τ = {balanced['tau']:.3f} gives accuracy {balanced['accuracy']:.3f} with coverage {balanced['coverage']:.3f}
+
+**Interpretation:**
+- As τ increases from 0 to 1, coverage decreases (fewer tasks go to humans) while accuracy typically improves initially then may stabilize or decline.
+- The optimal τ depends on your priorities: high accuracy (higher τ) vs. workload management (lower τ).
+- This curve shows the fundamental trade-off between human involvement and system performance.
+"""
+            return interpretation
+
         sweep_btn.click(
             fn=on_sweep,
             inputs=[task, dataset_size, base_acc, fatigue_after, fatigue_drop, tmin, tmax, tstep],
             outputs=[curve_plot, curve_table]
+        )
+        
+        interpret_sweep_btn.click(
+            fn=interpret_sweep_results,
+            inputs=[curve_table],
+            outputs=[sweep_interpretation]
         )
 
     with gr.Tab("Adaptive τ controller"):
@@ -394,16 +427,59 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
 
         traj_plot = gr.LinePlot(x="t", y="accuracy", label="Adaptive trajectory")
         traj_table = gr.Dataframe(interactive=False)
+        interpret_adapt_btn = gr.Button("Interpret Results")
+        adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the adaptive trajectory.")
 
         def on_adapt(task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp):
             df = make_dataset(int(dataset_size), task)
             traj = adaptive_tau(df, float(target_acc), float(base_acc), int(fatigue_after),
                                 float(fatigue_drop), int(steps), float(tau0), float(kp))
             return traj[["t","accuracy","tau"]], traj
+
+        def interpret_adapt_results(traj_df, target_acc):
+            if traj_df.empty:
+                return "No data available. Please run the adaptive simulation first."
+            
+            final_acc = traj_df['accuracy'].iloc[-1]
+            final_tau = traj_df['tau'].iloc[-1]
+            initial_acc = traj_df['accuracy'].iloc[0]
+            max_acc = traj_df['accuracy'].max()
+            min_acc = traj_df['accuracy'].min()
+            converged = abs(final_acc - float(target_acc)) < 0.01
+            
+            # Calculate stability (variance in last 10 steps)
+            last_10 = traj_df['accuracy'].tail(10)
+            stability = last_10.std()
+            
+            interpretation = f"""
+## Adaptive Trajectory Analysis
+
+**Target Accuracy**: {float(target_acc):.3f}
+**Final Results:**
+- **Final Accuracy**: {final_acc:.3f}
+- **Final τ**: {final_tau:.3f}
+- **Accuracy Range**: {min_acc:.3f} to {max_acc:.3f}
+- **Convergence**: {'Achieved' if converged else 'Not fully achieved'}
+- **Stability** (last 10 steps std): {stability:.4f}
+
+**Interpretation:**
+- Started at accuracy {initial_acc:.3f}, evolved to {final_acc:.3f}
+- The system {'successfully converged to the target' if converged else f'approached the target but settled at {final_acc:.3f}'}
+- Higher stability values indicate more oscillation; lower k_p values may help
+- The final τ of {final_tau:.3f} represents the learned optimal threshold for this scenario
+"""
+            return interpretation
+
         adapt_btn.click(
             fn=on_adapt,
             inputs=[task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp],
             outputs=[traj_plot, traj_table]
+        )
+        
+        interpret_adapt_btn.click(
+            fn=interpret_adapt_results,
+            inputs=[traj_table, target_acc],
+            outputs=[adapt_interpretation]
         )
 
     demo.load(lambda: None, None, None)
