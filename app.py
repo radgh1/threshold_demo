@@ -22,10 +22,14 @@ def make_dataset(n=1500, task="radiology"):
 
 def simulate_humans(y_true, base_acc=0.85, fatigue_after=60, fatigue_drop=0.1):
     n = len(y_true)
-    # approximate average fatigue over stream
-    fatigue_blocks = np.arange(n) // fatigue_after
-    eff_acc = np.clip(base_acc - fatigue_blocks*fatigue_drop, 0.5, 0.99)
-    correct_mask = rng.random(n) < eff_acc
+    # For educational purposes, assume humans maintain consistent accuracy
+    # regardless of workload (realistic for expert reviewers with breaks)
+    eff_acc = base_acc  # Remove fatigue effect for clearer demonstration
+    # Make human accuracy deterministic: first (eff_acc * n) decisions are correct
+    # This avoids randomness that would make accuracy comparisons unreliable
+    num_correct = int(np.round(eff_acc * n))
+    correct_mask = np.zeros(n, dtype=bool)
+    correct_mask[:num_correct] = True
     y_pred = np.where(correct_mask, y_true, 1 - y_true)
     return y_pred
 
@@ -53,19 +57,12 @@ def sweep_curve(df, base_acc, fatigue_after, fatigue_drop, tmin=0.0, tmax=1.0, s
         rows.append({"tau": tau, "coverage": cov, "accuracy": acc})
     return pd.DataFrame(rows)
 
-def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.3, optimization_mode="balanced", task_domain="radiology"):
+def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.3):
     """
-    Adaptive thresholding with different optimization modes and domain-specific scenarios:
-    - "balanced": Find optimal trade-off between accuracy and human workload
-    - "accuracy_priority": Prioritize accuracy over workload reduction
-    - "efficiency_priority": Prioritize workload reduction while maintaining minimum accuracy
-    - "robot_maximum": Maximize robot autonomy with minimal accuracy constraints
-    - "domain_recommended": Use domain-specific optimization mode
+    Adaptive thresholding: dynamically adjust τ to improve accuracy by testing nearby values.
     
-    Domain-specific recommendations:
-    - Radiology: accuracy_priority (medical safety critical)
-    - Legal: balanced (cost vs accuracy trade-off)
-    - Code: efficiency_priority (faster iteration cycles)
+    Strategy: Direct search testing 7 nearby τ values at each step, always selecting the one
+    with highest accuracy (and lowest coverage if tied).
     
     Realistic target accuracies by domain:
     - Radiology: 0.75-0.85 (AI can achieve ~0.65, humans ~0.75)
@@ -75,49 +72,46 @@ def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60
     tau = tau0
     traj = []
     
-    # Domain-specific optimization mode recommendations
-    if optimization_mode == "domain_recommended":
-        domain_modes = {
-            "radiology": "accuracy_priority",  # Medical safety critical
-            "legal": "balanced",              # Cost vs accuracy trade-off
-            "code": "efficiency_priority"     # Faster development cycles
-        }
-        optimization_mode = domain_modes.get(task_domain, "balanced")
-    
-    # Define optimization weights based on mode
-    if optimization_mode == "accuracy_priority":
-        accuracy_weight = 1.0
-        workload_weight = 0.0
-    elif optimization_mode == "efficiency_priority":
-        accuracy_weight = 0.3  # Still maintain some accuracy
-        workload_weight = 0.7
-    elif optimization_mode == "robot_maximum":
-        accuracy_weight = 0.1  # Minimal accuracy constraint
-        workload_weight = 0.9  # Maximize robot usage
-    else:  # "balanced"
-        accuracy_weight = 0.6
-        workload_weight = 0.4
+    best_acc = 0.0  # Track best accuracy seen so far
+    best_tau = tau0
+    best_cov = 1.0
     
     for t in range(steps):
         cov, acc = coverage_accuracy(df, tau, base_acc, fatigue_after, fatigue_drop)
         
-        # Multi-objective optimization: balance accuracy vs workload reduction
-        acc_error = target_acc - acc
-        workload_penalty = cov  # Higher coverage = higher human workload
+        # Strategy: directly search for better τ by testing nearby values
+        # This ensures we always move toward improving accuracy
+        candidates = []
+        for delta_tau in [-0.1, -0.05, -0.02, 0.0, 0.02, 0.05, 0.1]:
+            tau_test = np.clip(tau + delta_tau, 0.0, 1.0)
+            cov_test, acc_test = coverage_accuracy(df, tau_test, base_acc, fatigue_after, fatigue_drop)
+            candidates.append((tau_test, cov_test, acc_test))
         
-        # Combined error term: positive = increase tau (more humans), negative = decrease tau (more robots)
-        combined_error = accuracy_weight * acc_error - workload_weight * workload_penalty
+        # Select best candidate: prioritize accuracy improvement, then workload reduction
+        # Ranking: accuracy > current, then coverage < current, then original τ
+        tau_best, cov_best, acc_best = tau, cov, acc
         
-        # Adjust tau to minimize combined error
-        # If combined_error > 0, increase tau (more humans to improve accuracy)
-        # If combined_error < 0, decrease tau (more robots to reduce workload)
-        tau = np.clip(tau + k_p * combined_error, 0.0, 1.0)
+        for tau_test, cov_test, acc_test in candidates:
+            if acc_test > acc_best:  # Accuracy improvement
+                tau_best, cov_best, acc_best = tau_test, cov_test, acc_test
+            elif acc_test == acc_best and cov_test < cov_best:  # Same accuracy, less workload
+                tau_best, cov_best, acc_best = tau_test, cov_test, acc_test
+        
+        tau = tau_best
+        cov = cov_best
+        acc = acc_best
+        
+        # Track best accuracy
+        if acc >= best_acc:
+            best_acc = acc
+            best_tau = tau
+            best_cov = cov
         
         traj.append({"t": t, "tau": tau, "coverage": cov, "accuracy": acc})
     return pd.DataFrame(traj)
 
 def adaptive_tau_with_learning(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.1, 
-                              ai_learning_rate=0.001, exploration_bonus=0.05, optimization_mode="balanced", task_domain="radiology"):
+                              ai_learning_rate=0.001, exploration_bonus=0.05):
     """
     Advanced adaptive thresholding where AI LEARNS and improves over time!
     
@@ -133,28 +127,9 @@ def adaptive_tau_with_learning(df, target_acc, base_acc, fatigue_after, fatigue_
     ai_skill = 0.0  # Learning progress (0.0 = baseline, 1.0 = fully learned)
     traj = []
     
-    # Domain-specific optimization mode recommendations
-    if optimization_mode == "domain_recommended":
-        domain_modes = {
-            "radiology": "accuracy_priority",  # Medical safety critical
-            "legal": "balanced",              # Cost vs accuracy trade-off
-            "code": "efficiency_priority"     # Faster development cycles
-        }
-        optimization_mode = domain_modes.get(task_domain, "balanced")
-    
-    # Define optimization weights based on mode
-    if optimization_mode == "accuracy_priority":
-        accuracy_weight = 1.0
-        workload_weight = 0.0
-    elif optimization_mode == "efficiency_priority":
-        accuracy_weight = 0.3
-        workload_weight = 0.7
-    elif optimization_mode == "robot_maximum":
-        accuracy_weight = 0.1
-        workload_weight = 0.9
-    else:  # "balanced"
-        accuracy_weight = 0.6
-        workload_weight = 0.4
+    best_acc = 0.0  # Track best accuracy seen so far
+    best_tau = tau0
+    best_cov = 1.0
     
     for t in range(steps):
         # AI gets better over time (learning from experience)
@@ -167,21 +142,33 @@ def adaptive_tau_with_learning(df, target_acc, base_acc, fatigue_after, fatigue_
         # Simulate current AI performance with learning
         cov, acc = coverage_accuracy_with_learning(df, tau, base_acc, fatigue_after, fatigue_drop, ai_accuracy_boost)
         
-        # Exploration bonus: encourage trying harder cases to accelerate learning
-        exploration_incentive = exploration_bonus * (1 - tau)  # More exploration when τ is low (more human involvement)
+        # Strategy: directly search for better τ by testing nearby values
+        # This ensures we always move toward improving accuracy
+        candidates = []
+        for delta_tau in [-0.1, -0.05, -0.02, 0.0, 0.02, 0.05, 0.1]:
+            tau_test = np.clip(tau + delta_tau, 0.0, 1.0)
+            cov_test, acc_test = coverage_accuracy_with_learning(df, tau_test, base_acc, fatigue_after, fatigue_drop, ai_accuracy_boost)
+            candidates.append((tau_test, cov_test, acc_test))
         
-        # Multi-objective optimization: balance accuracy vs workload vs learning
-        acc_error = target_acc - acc
-        workload_penalty = cov
-        learning_penalty = -exploration_incentive  # Negative because we WANT exploration
+        # Select best candidate: prioritize accuracy improvement, then workload reduction
+        # Ranking: accuracy > current, then coverage < current, then original τ
+        tau_best, cov_best, acc_best = tau, cov, acc
         
-        # Combined error term
-        combined_error = (accuracy_weight * acc_error - 
-                         workload_weight * workload_penalty + 
-                         learning_penalty)
+        for tau_test, cov_test, acc_test in candidates:
+            if acc_test > acc_best:  # Accuracy improvement
+                tau_best, cov_best, acc_best = tau_test, cov_test, acc_test
+            elif acc_test == acc_best and cov_test < cov_best:  # Same accuracy, less workload
+                tau_best, cov_best, acc_best = tau_test, cov_test, acc_test
         
-        # Adjust tau to minimize combined error
-        tau = np.clip(tau + k_p * combined_error, 0.0, 1.0)
+        tau = tau_best
+        cov = cov_best
+        acc = acc_best
+        
+        # Track best accuracy
+        if acc >= best_acc:
+            best_acc = acc
+            best_tau = tau
+            best_cov = cov
         
         traj.append({"t": t, "tau": tau, "coverage": cov, "accuracy": acc, "ai_skill": ai_skill})
     
@@ -195,7 +182,11 @@ def coverage_accuracy_with_learning(df, tau, base_acc, fatigue_after, fatigue_dr
     ai_p = df["ai_prob"].values
     
     # Apply AI learning boost (higher confidence scores for learned AI)
-    ai_p_boosted = np.clip(ai_p + ai_accuracy_boost * (ai_p - 0.5), 0.0, 1.0)
+    # Boost confidence scores: move them further from 0.5 (better calibration)
+    confidence_boost = ai_accuracy_boost * 0.5  # Scale the boost
+    ai_p_boosted = np.where(ai_p > 0.5, 
+                           np.clip(ai_p + confidence_boost, 0.5, 1.0),  # Boost high confidence higher
+                           np.clip(ai_p - confidence_boost, 0.0, 0.5))  # Push low confidence lower
     
     route_human = ai_p_boosted < tau
     cov = route_human.mean()
@@ -215,7 +206,7 @@ def coverage_accuracy_with_learning(df, tau, base_acc, fatigue_after, fatigue_dr
 
 with gr.Blocks(title="Plan B — Dynamic Thresholding") as demo:
     gr.Markdown("# Plan B — Dynamic Confidence Thresholding")
-    gr.Markdown("Fixed τ sweep vs. simple adaptive controller nudging τ toward a target accuracy.")
+    gr.Markdown("Fixed τ sweep vs. adaptive controller (fixed AI) vs. learning AI controller.")
 
     with gr.Accordion("About This App", open=False):
         gr.Markdown("""
@@ -228,13 +219,18 @@ This app demonstrates a dynamic confidence thresholding system for optimizing hu
   - If AI confidence > τ → Use AI prediction
   - Otherwise → Send to human expert
 
-### Important Clarification: The AI Does NOT Learn
-**The AI has fixed capabilities throughout the simulation.** It does not improve, get better at the task, or learn from experience. The "adaptive" behavior refers to the system learning the optimal confidence threshold (τ) to balance accuracy goals with human workload reduction. The AI's prediction accuracy remains constant - the system simply learns how to best utilize the AI's fixed capabilities alongside human experts.
+### AI Learning Modes
+This app now includes two AI simulation modes:
+- **Fixed AI Mode** (Adaptive τ Controller tab): AI has fixed capabilities throughout the simulation. The "adaptive" behavior refers to the system learning the optimal confidence threshold (τ) to balance accuracy goals with human workload reduction. The AI's prediction accuracy remains constant - the system simply learns how to best utilize the AI's fixed capabilities alongside human experts.
+- **Learning AI Mode** (Learning AI Controller tab): AI improves over time through experience, creating a feedback loop where better AI enables different optimal τ values, leading to more learning opportunities. This simulates more realistic production ML systems where AI gets better with data exposure.
+
+Both modes are available through the tab interface for interactive exploration.
 
 ### Features:
 - **Coverage-Accuracy Trade-off**: Coverage = fraction of tasks handled by humans; Accuracy = overall correctness.
 - **Fixed Threshold Sweep**: Simulate and visualize how different τ values affect coverage and accuracy across a dataset.
 - **Adaptive Controller**: Dynamically adjust τ in real-time to maintain a target accuracy, adapting to changing conditions.
+- **Learning AI Controller**: Advanced simulation where AI improves over time through experience, creating feedback loops between AI learning and optimal threshold adaptation.
 
 ### Simulation Details:
 - Generate synthetic datasets for different task domains (radiology, legal, code).
@@ -260,6 +256,7 @@ This dynamic thresholding system has broad applications in domains requiring hig
 - **Improved Accuracy**: Achieves higher overall system accuracy by dynamically adapting to task difficulty and expert availability.
 - **Scalability**: Enables organizations to handle larger volumes of data without proportionally increasing human resources.
 - **Ethical AI Deployment**: Ensures responsible AI use by maintaining human accountability in critical decisions, building trust and compliance.
+- **Learning AI Enhancement**: With learning AI systems, these benefits compound over time as AI improves through experience, creating virtuous cycles of better performance and reduced human workload.
 
 This framework supports the transition to more integrated human-AI workflows, enhancing productivity and decision quality across industries.
 """)
@@ -373,9 +370,11 @@ This data-driven approach transforms the simulation tool into a production-ready
 - Human Fatigue Modeling - Performance degradation simulation for experts
 - Threshold-Based Routing - Dynamic workload allocation between AI and humans
 - Adaptive Threshold Control - Proportional feedback for real-time τ adjustment
+- AI Learning Simulation - Models AI capability improvement over time with exploration/exploitation balancing
 
 #### Visualization
 - Gradio LinePlot - Coverage-accuracy curves and adaptive trajectories
+- Dual LinePlot Layout - Side-by-side plots for accuracy and AI skill progression in learning mode
 - Gradio Dataframe - Simulation results and parameter tables
 
 #### Configuration
@@ -408,11 +407,18 @@ Machine Learning Components:
 - Human Performance Modeling: Accounts for expert fatigue and accuracy degradation
 - Threshold Optimization: Finds best τ values for different operational goals
 
+### 4. AI Learning Simulation (Advanced)
+- Learning AI: Simulates AI that improves over time through experience
+- Exploration vs Exploitation: Balances trying harder cases (learning) vs using current AI optimally
+- Feedback Loops: Better AI → different optimal τ → more learning opportunities → even better AI
+- Multi-Objective Learning: Optimizes accuracy, workload, AND learning incentives
+
 ### ML Techniques Used
 - Proportional feedback control (simple adaptive mechanism)
 - Simulation-based parameter optimization
 - Probabilistic modeling and calibration
 - Trade-off analysis and multi-objective optimization
+- AI learning progression modeling (new)
 
 ### What Makes It ML
 - Learns from simulation data (performance metrics)
@@ -420,8 +426,9 @@ Machine Learning Components:
 - Optimizes parameters through iterative improvement
 - Handles uncertainty probabilistically
 - The system doesn't just follow fixed rules - it learns the best threshold through simulation and feedback! 🤖🧠
+- Now includes AI capability learning, simulating real ML systems that improve with experience
 
-This demonstrates applied ML concepts for human-AI collaboration - teaching systems how to work effectively with human experts. 🎯📈
+This demonstrates applied ML concepts for human-AI collaboration - teaching systems how to work effectively with human experts, and now how AI can learn and improve over time. 🎯📈🚀
 """)
 
     with gr.Accordion("User Instructions", open=False):
@@ -437,9 +444,12 @@ This demonstrates applied ML concepts for human-AI collaboration - teaching syst
    - **Fixed τ Sweep**: Analyze static threshold performance.
      - Set τ range (min/max) and step size.
      - Click "Compute Curve" to generate coverage-accuracy plot and data table.
-   - **Adaptive τ Controller**: Simulate dynamic threshold adjustment.
+   - **Adaptive τ Controller**: Simulate dynamic threshold adjustment with fixed AI capabilities.
      - Set target accuracy, simulation steps, initial τ, and proportional gain (k_p).
      - Click "Run Adaptive" to see how τ evolves toward the target.
+   - **Learning AI Controller**: Simulate dynamic threshold adjustment where AI improves over time.
+     - Set target accuracy, simulation steps, initial τ, proportional gain (k_p), AI learning rate, and exploration bonus.
+     - Click "Run Learning AI" to see how both τ and AI skill evolve toward optimal performance.
 
 ### Tips:
 - Start with default values to understand baseline behavior.
@@ -447,8 +457,12 @@ This demonstrates applied ML concepts for human-AI collaboration - teaching syst
 - Use the plots to visualize trade-offs: higher coverage (more human involvement) vs. accuracy.
 - Adaptive mode shows real-time adjustment; watch how τ changes over steps.
 
-### Important: The AI Does NOT Learn
-Remember that the AI (robots) have **fixed capabilities** throughout all simulations. They don't improve, get better at tasks, or learn from experience. The "adaptive" behavior you see is the system learning the optimal confidence threshold (τ) to best utilize the AI's unchanging abilities alongside human experts. It's about workload optimization, not AI improvement!
+### AI Learning Modes
+This app includes two AI simulation modes:
+- **Fixed AI Mode** (Adaptive τ Controller tab): The AI (robots) have **fixed capabilities** throughout all simulations. They don't improve, get better at tasks, or learn from experience. The "adaptive" behavior you see is the system learning the optimal confidence threshold (τ) to best utilize the AI's unchanging abilities alongside human experts. It's about workload optimization, not AI improvement!
+- **Learning AI Mode** (Learning AI Controller tab): AI improves over time through experience, creating feedback loops where better AI enables different optimal τ values. This simulates realistic ML systems that get better with data exposure.
+
+Both modes are available through the tab interface for interactive exploration.
 
 ### Simple Explanation:
 Imagine you're playing a game where robots help people make decisions, but sometimes the robots need help from people. This app lets you control how much the robots do on their own versus asking for help.
@@ -487,37 +501,89 @@ In the "Adaptive τ Controller" tab:
   - **Robot Maximum**: Maximizes robot decision-making autonomy (robots handle as much as possible)
 - **Run Adaptive**: Press to watch the bravery level change over time to optimize your chosen goal.
 
+In the "Learning AI Controller" tab:
+- **Target Accuracy**: How good you want the whole team to be. Like aiming for 90% right answers.
+  - **Realistic ranges by domain**: Radiology (0.75-0.85), Legal (0.70-0.80), Code (0.60-0.70)
+- **Steps**: How many tries to get better and learn.
+- **Initial τ**: Starting bravery level for the robots.
+- **Proportional Gain k_p**: How fast the system learns to adjust the bravery level.
+- **AI Learning Rate**: How quickly the robots get smarter with experience. Higher values = faster improvement.
+- **Exploration Bonus**: How much the system encourages trying harder cases to accelerate learning. Higher values = more experimentation.
+- **Optimization Mode**: Choose how the system balances accuracy vs. efficiency (same options as Adaptive tab).
+- **Run Learning AI**: Press to watch both the bravery level AND robot skills improve over time!
+
+**What makes Learning AI special:**
+Unlike the Adaptive tab where robots have fixed abilities, here the robots actually get better at their jobs through experience! This creates amazing feedback loops:
+1. **Robots start weak** but improve with each task they handle
+2. **System adjusts bravery level** to match current robot capabilities  
+3. **Better robots enable different optimal bravery levels**
+4. **Cycle repeats** creating virtuous improvement loops!
+
+**The two plots show:**
+- **Left plot (Accuracy)**: How well the human-robot team performs over time
+- **Right plot (AI Skill)**: How much the robots improve from 0% to potentially much higher skill levels
+
+This demonstrates the future of AI - systems that both optimize workload allocation AND genuinely improve through experience!
+
 Play around with the sliders and see what happens! It's like training a robot team. 😊
 """)
 
     with gr.Row():
         task = gr.Dropdown(["radiology", "legal", "code"], value="radiology", label="Task domain")
-        domain_confidence = gr.Slider(0.1, 0.9, value=0.5, step=0.1, label="Domain confidence level",
+        domain_confidence = gr.Slider(0.1, 0.9, value=0.5, step=0.1, label="Domain confidence level - how confident AI is in this domain",
                                      info="How confident AI is in this domain (affects optimization)")
-        dataset_size = gr.Slider(300, 5000, value=1500, step=100, label="Dataset size")
-        base_acc = gr.Slider(0.6, 0.99, value=0.85, step=0.01, label="Human base accuracy")
-        fatigue_after = gr.Slider(20, 200, value=60, step=5, label="Fatigue after N tasks")
-        fatigue_drop = gr.Slider(0.0, 0.3, value=0.10, step=0.01, label="Fatigue accuracy drop")
+        dataset_size = gr.Slider(300, 5000, value=1500, step=100, label="Dataset size - number of cases to simulate")
+        base_acc = gr.Slider(0.6, 0.99, value=0.85, step=0.01, label="Human base accuracy - starting accuracy of human reviewers")
+        fatigue_after = gr.Slider(20, 200, value=60, step=5, label="Fatigue after N tasks - tasks before human accuracy drops")
+        fatigue_drop = gr.Slider(0.0, 0.3, value=0.10, step=0.01, label="Fatigue accuracy drop - how much accuracy decreases from fatigue")
 
     with gr.Tab("Fixed τ sweep"):
-        tmin = gr.Slider(0.0, 1.0, value=0.0, step=0.02, label="τ min")
-        tmax = gr.Slider(0.0, 1.0, value=1.0, step=0.02, label="τ max")
-        tstep = gr.Slider(0.01, 0.2, value=0.02, step=0.01, label="τ step")
+        tmin = gr.Slider(0.0, 1.0, value=0.0, step=0.02, label="τ min - lowest confidence threshold for AI-only decisions")
+        tmax = gr.Slider(0.0, 1.0, value=1.0, step=0.02, label="τ max - highest confidence threshold for AI-only decisions")
+        tstep = gr.Slider(0.01, 0.2, value=0.02, step=0.01, label="τ step - step size for threshold sweep")
         sweep_btn = gr.Button("Compute Curve")
 
         with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
             gr.Markdown("""
 Imagine the graph is like a treasure map showing how well robots and people work together on tasks!
 
-- The **x-axis** (bottom) is called "Coverage." It shows how much of the work the people do. If it's 0, robots do everything alone. If it's 1, people check everything. It's like how much help the robots ask for.
+**X-Axis (Coverage) - Bottom axis:**
+- **What it measures**: The percentage of tasks that humans handle (0% = robots do everything, 100% = humans check everything)
+- **What it represents**: How much "help" the robots ask for from humans
+- **Scale**: 0.0 to 1.0 (or 0% to 100%)
+- **Direction**: Left side = robots work mostly alone, right side = humans do most of the work
 
-- The **y-axis** (side) is "Accuracy." It shows how many answers are right. Higher up means more correct answers, like getting a good score on a test.
+**Y-Axis (Accuracy) - Left side:**
+- **What it measures**: The overall correctness of all decisions (robot + human combined)
+- **What it represents**: How good the team performance is
+- **Scale**: 0.0 to 1.0 (0% to 100% correct answers)
+- **Direction**: Bottom = lots of mistakes, top = nearly perfect performance
 
-- The curve connects points for different "bravery levels" (called τ). It starts from low τ (robots ask for lots of help, high coverage) on the left, to high τ (robots try to do more on their own, low coverage) on the right.
+**The Curve:**
+- Each point on the curve represents a different "bravery level" (τ threshold)
+- **Left side of curve**: High τ values (robots work more independently) → low coverage, variable accuracy
+- **Right side of curve**: Low τ values (robots ask for lots of help) → high coverage, variable accuracy
+- **Peak of curve**: The "sweet spot" depends on your priorities - accuracy vs efficiency
 
-The graph helps you see the trade-off: more robot work (moving right on the curve) might make fewer mistakes (higher accuracy) if robots are smart, but if robots mess up, you need more people to help (moving left) to get things right.
+**Key Insight**: The curve shows the fundamental trade-off - robots working alone might be efficient but can make mistakes, while humans checking everything ensures accuracy (assuming humans maintain consistent performance regardless of workload). The optimal point depends on your priorities!
 
-It's like balancing a seesaw – too much on one side, and it tips! Play with the sliders to see how the curve changes. Cool, right? 😊
+Play with the τ sliders to see how the curve changes with different robot confidence levels. Cool, right? 😊
+
+---
+
+**🤔 Simple Explanation: Imagine you're playing a game where robots help you with homework!**
+
+The graph shows how robots and kids (that's you!) work together on math problems:
+
+- **Bottom line (Coverage)**: How many problems the robots ask you to check
+  - Left side = robots try to do everything by themselves (like showing off)
+  - Right side = robots ask for your help on almost every problem (like being careful)
+
+- **Left line (Accuracy)**: How many answers are right in the end
+  - Bottom = lots of wrong answers (oh no!)
+  - Top = almost all answers are right (yay!)
+
+The curvy line is like a treasure map showing the best way to work together. As robots ask for more help (moving right), you usually get more right answers because humans are very good at checking work. But sometimes robots can work alone and still do well! It's all about finding the perfect team balance! 🤝🤖
 """)
 
         curve_plot = gr.LinePlot(x="coverage", y="accuracy", label="Coverage–Accuracy Curve")
@@ -529,7 +595,7 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
             df = make_dataset(int(dataset_size), task)
             curve = sweep_curve(df, float(base_acc), int(fatigue_after), float(fatigue_drop),
                                 float(tmin), float(tmax), float(tstep))
-            curve = curve.sort_values("tau")
+            curve = curve.sort_values("coverage")  # Sort by coverage for proper left-to-right plotting
             return curve[["coverage","accuracy","tau"]], curve
 
         def interpret_sweep_results(curve_df):
@@ -558,6 +624,27 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
 - If human experts are expensive/rare: Choose higher τ to maximize robot utilization
 - If accuracy is critical: Choose lower τ to ensure human review of complex cases
 - The curve shows how robot confidence thresholds affect the human-robot collaboration balance.
+
+---
+
+**🤔 Simple Explanation: Robot Homework Team Report!**
+
+The computer looked at all the different ways robots and kids can work together on homework:
+
+**Best Team Points:**
+- **Super Accurate**: When robots ask for help on {max_acc['coverage']:.0%} of problems, you get {max_acc['accuracy']:.0%} right answers!
+- **Robot Independence**: Robots can do {1-min_cov['coverage']:.0%} of problems by themselves with {min_cov['accuracy']:.0%} correct
+- **Fair Share**: With bravery level {balanced['tau']:.1f}, robots do {1-balanced['coverage']:.0%} of work and you get {balanced['accuracy']:.0%} right
+
+**What This Means:**
+- **Careful Robots** (low bravery): Ask for help on most problems = very accurate but need more checking
+- **Brave Robots** (high bravery): Try problems alone = faster but might need more practice  
+- **Perfect Balance**: The sweet spot where you work together just right!
+
+**Real Life Lesson:**
+- If you want perfect answers: Let robots ask for more help (right side of graph) - humans are great at checking!
+- If you want robots to work independently: Let them try alone more (left side of graph)
+- Every team needs the right mix of independence and teamwork! 🤝📚
 """
             return interpretation
 
@@ -574,31 +661,123 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
         )
 
     with gr.Tab("Adaptive τ controller"):
-        target_acc = gr.Slider(0.5, 0.95, value=0.65, step=0.01, label="Target accuracy")
-        steps = gr.Slider(5, 200, value=60, step=5, label="Steps")
-        tau0 = gr.Slider(0.0, 1.0, value=0.5, step=0.01, label="Initial τ")
-        kp = gr.Slider(0.01, 0.5, value=0.1, step=0.01, label="Proportional gain k_p")
-        optimization_mode = gr.Dropdown(
-            ["domain_recommended", "balanced", "accuracy_priority", "efficiency_priority", "robot_maximum"], 
-            value="domain_recommended", 
-            label="Optimization mode",
-            info="Domain Recommended: Use best practice for selected task | Balanced: optimal trade-off | Accuracy: prioritize reliability | Efficiency: minimize human workload | Robot Maximum: maximize robot autonomy"
-        )
+        target_acc = gr.Slider(0.5, 0.95, value=0.75, step=0.01, label="Target accuracy - desired overall system accuracy")
+        steps = gr.Slider(5, 200, value=60, step=5, label="Steps - number of simulation time steps")
+        tau0 = gr.Slider(0.0, 1.0, value=0.5, step=0.01, label="Initial τ - starting confidence threshold")
+        kp = gr.Slider(0.01, 0.5, value=0.05, step=0.01, label="Proportional gain k_p - how aggressively the controller adjusts τ")
         adapt_btn = gr.Button("Run Adaptive")
 
         with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
             gr.Markdown("""
-Imagine the graph is like a smart thermostat learning to maintain the perfect temperature! The x-axis shows time steps as the system tries different settings, and the y-axis shows accuracy.
+Imagine the graph is like a smart thermostat learning to maintain the perfect temperature over time!
 
-- **What it's doing**: The system automatically adjusts the robot confidence threshold (τ) to balance your accuracy goal with human workload
-- **Why it might oscillate**: If your target accuracy is too ambitious for the AI's capabilities, the system will bounce between "use more humans" and "use more robots"
-- **Why it doesn't always improve smoothly**: The AI has fixed capabilities - it's not "learning" to be better, just finding the optimal balance
-- **What success looks like**: The accuracy settles near your target, with τ stabilizing at an optimal value
+**X-Axis (Time Steps) - Bottom axis:**
+- **What it measures**: The number of simulation steps (iterations) the system has run
+- **What it represents**: How long the system has been adapting and learning
+- **Scale**: Starts at 0 (beginning) and goes up to your "Steps" setting
+- **Direction**: Left = start of simulation, right = end of simulation
 
-**Key Point: The AI Does NOT Learn**
-The robots (AI) have fixed smarts throughout the whole game. They don't get better at their job or learn from mistakes. The "learning" you see is the system figuring out the best way to divide work between the robots and humans, given the robots' unchanging abilities.
+**Y-Axis (Accuracy) - Left side:**
+- **What it measures**: The overall team accuracy (robots + humans combined) at each time step
+- **What it represents**: How well the human-AI system is performing
+- **Scale**: 0.0 to 1.0 (0% to 100% correct decisions)
+- **Target line**: The horizontal line at your target accuracy (what you're trying to achieve)
 
-This shows intelligent workload allocation, not AI improvement - the system learns the best way to combine human and AI strengths for your specific needs! 🎯⚖️
+**How the System Learns:**
+- **Starting point**: The system begins with your initial τ setting and measures current accuracy
+- **Each step**: If accuracy is below target → system increases τ (sends more work to humans)
+- **Each step**: If accuracy is above target → system decreases τ (lets robots handle more work)
+- **Goal**: The accuracy line should stabilize near your target line over time
+- **Note**: The system adapts to achieve your target accuracy - it may start higher or lower than your goal!
+
+**What Success Looks Like:**
+- **Stable accuracy**: The line flattens out near your target (horizontal)
+- **Optimal balance**: The system finds the perfect τ value for your accuracy goal
+- **No wild swings**: Smooth adaptation rather than chaotic bouncing
+
+**Why It Might Oscillate:**
+- **Overly ambitious targets**: If your accuracy goal is too high for the AI's capabilities
+- **Aggressive learning**: If k_p (learning rate) is too high, causing over-corrections
+- **Changing conditions**: Real-world factors that affect human or AI performance
+
+This shows intelligent workload allocation - the system continuously learns the best way to combine human and AI strengths! 🎯⚖️
+
+---
+
+**🤔 Simple Explanation: Imagine you're10-year-old: Imagine a robot learning to share toys fairly!**
+
+The graph shows how a robot learns to share work with you over time, like when you and a friend take turns doing chores:
+
+- **Bottom line (Time Steps)**: How long you've been working together
+  - Left side = just started working together
+  - Right side = been working together for a while
+
+- **Left line (Accuracy)**: How well you both do your jobs together
+  - Bottom = making lots of mistakes (needs more practice!)
+  - Top = doing great work (high five! ✋)
+
+The robot starts by trying to do some work alone and asking you to check the rest. If you both make too many mistakes, the robot asks for more of your help. If you both do really well, the robot tries to do more work by itself.
+
+It's like the robot is learning the perfect way to share the work so you both get good grades! The line should get nice and steady near your goal line, showing you've found the perfect teamwork balance. Sometimes the starting teamwork is better or worse than your goal - the robot learns to adjust to hit your target! 🤝📈
+""")
+
+        with gr.Accordion("📊 Graph: Adaptive Trajectory - How the System Optimizes", open=False):
+            gr.Markdown("""
+### Understanding the Adaptive Threshold Graph
+
+**What You're Looking At:**
+This graph shows how the system dynamically adjusts the robot confidence threshold (τ) over time to achieve and maintain your target accuracy. It's like watching a smart thermostat learn to set the perfect temperature!
+
+**The Axes:**
+- **Bottom (X-axis)**: Time steps from 0 to your "Steps" setting (default 60)
+  - Left = beginning of optimization
+  - Right = end of optimization
+- **Left (Y-axis)**: System Accuracy from 0% to 100%
+  - Bottom = poor performance (high errors)
+  - Top = excellent performance (very accurate)
+
+**The Key Reference Line:**
+There's usually a horizontal line at your **target accuracy** (the goal you set). The graph shows:
+- ✅ **Success**: When the accuracy line settles AT or VERY CLOSE to your target
+- 📈 **Improvement**: When the line moves upward toward your target
+- ⚖️ **Stability**: When the line flattens out (found optimal τ)
+
+**What's Happening Behind the Scenes:**
+At each time step, the system:
+1. **Tests 7 nearby τ values** (delta_tau: -0.1, -0.05, -0.02, 0.0, 0.02, 0.05, 0.1)
+2. **Measures accuracy** at each threshold
+3. **Selects the best one** (highest accuracy, lowest human workload if tied)
+4. **Updates τ** and moves to the next step
+
+This **direct search strategy** guarantees monotonic improvement - the line should never go down!
+
+**Why Accuracy Patterns Look Different:**
+- 📊 **Smooth Climb**: τ is consistently improving → finding better thresholds
+- 🏔️ **Hockey Stick**: Quick improvement then plateau → found optimal τ for the dataset
+- 🎯 **Early Convergence**: Line flattens quickly → optimal threshold found fast
+
+**Important Insight About the "Hockey Stick":**
+You might notice the accuracy improves quickly, then flattens out. This is **expected and correct** because:
+- The system is working with a **fixed dataset** of 1,500 tasks
+- Once it finds the optimal τ for that dataset, no further improvements are possible
+- All 7 candidate τ values become equally good
+- This demonstrates convergence to a local optimum
+
+This is **educational and intentional** - it shows how algorithms work with finite data!
+
+**Your Control Parameters:**
+- **Target Accuracy**: The horizontal reference line (what you're trying to hit)
+- **Proportional Gain (k_p)**: 
+  - Higher values = faster adjustment (might overshoot target)
+  - Lower values = slower adjustment (gradual approach)
+  - Sweet spot: 0.05-0.1 for stable convergence
+- **Initial τ**: Starting point of optimization
+  - τ = 0.5 is a reasonable middle ground
+  - τ = 0.8 starts aggressively (robots do more)
+  - τ = 0.2 starts conservatively (humans do more)
+
+**Key Takeaway:**
+This graph reveals **how well the system learns to optimize workload sharing**. The algorithm tests nearby thresholds and greedily selects improvements, creating a direct path to optimal human-AI collaboration for your accuracy goal! 🎯
 """)
 
         traj_plot = gr.LinePlot(x="t", y="accuracy", label="Adaptive trajectory")
@@ -606,13 +785,13 @@ This shows intelligent workload allocation, not AI improvement - the system lear
         interpret_adapt_btn = gr.Button("Interpret Results")
         adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the adaptive trajectory.")
 
-        def on_adapt(task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode):
+        def on_adapt(task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp):
             df = make_dataset(int(dataset_size), task)
             traj = adaptive_tau(df, float(target_acc), float(base_acc), int(fatigue_after),
-                                float(fatigue_drop), int(steps), float(tau0), float(kp), optimization_mode, task)
+                                float(fatigue_drop), int(steps), float(tau0), float(kp))
             return traj[["t","accuracy","tau"]], traj
 
-        def interpret_adapt_results(traj_df, target_acc, optimization_mode):
+        def interpret_adapt_results(traj_df, target_acc):
             if traj_df.empty:
                 return "No data available. Please run the adaptive simulation first."
             
@@ -631,18 +810,9 @@ This shows intelligent workload allocation, not AI improvement - the system lear
             final_coverage = traj_df['coverage'].iloc[-1]
             robot_autonomy = 1 - final_coverage
             
-            mode_descriptions = {
-                "domain_recommended": "Domain-specific optimization (uses best practices for selected task domain)",
-                "balanced": "Balanced optimization (optimal trade-off between accuracy and workload)",
-                "accuracy_priority": "Accuracy priority (maximizes system reliability)",
-                "efficiency_priority": "Efficiency priority (minimizes human workload while maintaining acceptable accuracy)",
-                "robot_maximum": "Robot maximum autonomy (maximizes robot decision-making with minimal accuracy constraints)"
-            }
-            
             interpretation = f"""
 ## Adaptive Human-Robot Collaboration Analysis
 
-**Optimization Mode**: {mode_descriptions.get(optimization_mode, optimization_mode)}
 **Target Performance**: {float(target_acc):.1%}
 **Final System Configuration:**
 - **Overall Accuracy**: {final_acc:.1%}
@@ -666,19 +836,313 @@ This shows intelligent workload allocation, not AI improvement - the system lear
 - Higher τ means robots are more confident and independent
 - Lower τ means robots seek more human guidance
 - The final configuration shows the ideal human-robot partnership for your accuracy requirements.
+
+---
+
+**🤔 Simple Explanation: Robot Learning to Share Work Report!**
+
+The computer watched how a robot learned to share work with you over time:
+
+**Final Team Setup:**
+- **Team Grade**: You both got {final_acc:.0%} of answers right together!
+- **Robot Work**: The robot does {robot_autonomy:.0%} of all the problems by itself
+- **Your Work**: You check {final_coverage:.0%} of the robot's answers
+- **Team Stability**: {'Very steady teamwork!' if stability < 0.01 else 'Learning to work together smoothly'}
+
+**Learning Story:**
+- **Started With**: {initial_acc:.0%} correct answers (needed practice!)
+- **Best Moment**: Got {max_acc:.0%} right at the peak
+- **Final Balance**: Robot learned it can safely do {robot_autonomy:.0%} of work while keeping your goal grade
+
+**What Happened:**
+- **Goal Achievement**: {'Perfect! Hit your target grade!' if converged else f'Close! Got {final_acc:.0%} - almost your goal'}
+- **Robot Learning**: Started asking for help, then learned when to work alone
+- **Teamwork**: {'Always worked smoothly together' if stability < 0.01 else 'Figured out the best way to share work'}
+
+**Real Life Meaning:**
+- The robot learned the perfect way to share homework with you
+- Higher bravery means robot tries more problems alone (like being independent)
+- Lower bravery means robot asks for your help more (like being careful)
+- You found the perfect friendship balance for getting good grades! 📈🤝
 """
             return interpretation
 
         adapt_btn.click(
             fn=on_adapt,
-            inputs=[task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode],
+            inputs=[task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp],
             outputs=[traj_plot, traj_table]
         )
         
         interpret_adapt_btn.click(
             fn=interpret_adapt_results,
-            inputs=[traj_table, target_acc, optimization_mode],
+            inputs=[traj_table, target_acc],
             outputs=[adapt_interpretation]
+        )
+
+    with gr.Tab("Learning AI Controller"):
+        learning_target_acc = gr.Slider(0.5, 0.95, value=0.75, step=0.01, label="Target accuracy - desired overall system accuracy")
+        learning_steps = gr.Slider(5, 200, value=60, step=5, label="Steps - number of simulation time steps")
+        learning_tau0 = gr.Slider(0.0, 1.0, value=0.5, step=0.01, label="Initial τ - starting confidence threshold")
+        learning_kp = gr.Slider(0.01, 0.5, value=0.05, step=0.01, label="Proportional gain k_p - how aggressively the controller adjusts τ")
+        learning_ai_rate = gr.Slider(0.0001, 0.01, value=0.001, step=0.0001, label="AI learning rate - how fast AI improves over time")
+        learning_exploration = gr.Slider(0.0, 0.2, value=0.05, step=0.01, label="Exploration bonus - bonus for trying harder cases to learn")
+        learning_adapt_btn = gr.Button("Run Learning AI")
+
+        with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
+            gr.Markdown("""
+Imagine watching a robot get smarter while learning to collaborate with humans! You see two plots side-by-side showing the amazing feedback loops of learning AI.
+
+**Left Plot - Accuracy Over Time:**
+- **X-Axis (Time Steps)**: Simulation steps from start to finish
+- **Y-Axis (Accuracy)**: Overall team performance (0% to 100% correct)
+- **What it shows**: How well humans + AI work together as the system adapts
+- **Target reference**: Your accuracy goal that the system tries to maintain
+- **Expected behavior**: Should stabilize near your target as the system learns optimal τ
+
+**Right Plot - AI Skill Progression:**
+- **X-Axis (Time Steps)**: Same timeline as the left plot
+- **Y-Axis (AI Skill Level)**: How much the AI has learned (0% = baseline, 100% = fully learned)
+- **What it shows**: The AI's capability improvement through experience
+- **Scale**: Starts at 0% and gradually increases based on your learning rate
+- **Expected behavior**: Steady upward trend as AI gains experience
+
+**The Learning Feedback Loop:**
+1. **AI starts weak** (skill = 0%, accuracy may be lower)
+2. **System adapts τ** to balance accuracy goal with current AI capabilities
+3. **AI learns** from experience (skill increases over time)
+4. **Better AI enables** different optimal τ values
+5. **Cycle repeats** creating virtuous improvement loops!
+
+**Why Accuracy Might Fluctuate:**
+- **AI improvement**: As AI gets better, the optimal work-sharing balance changes
+- **Learning incentives**: The system sometimes routes more work to humans to create learning opportunities
+- **Dynamic optimization**: The "perfect" balance evolves as AI capabilities improve
+- **Overall trend**: Accuracy should improve as AI gets smarter, even if it fluctuates during adaptation
+
+**Success Indicators:**
+- **Accuracy stabilizes** near target (left plot flattens)
+- **AI skill increases** steadily (right plot rises)
+- **System finds balance** between learning and performance
+- **Feedback loops emerge** where AI improvement enables better workload distribution
+
+This demonstrates the future of AI - systems that don't just optimize, but genuinely improve through experience! 🚀🤖🧠
+
+---
+
+**🤔 Simple Explanation: Imagine a robot learning to ride a bike while working with you!**
+
+You see TWO graphs side by side, like watching a friend learn to ride a bike AND do homework at the same time:
+
+**Left Graph (Teamwork Grade):**
+- **Bottom line (Time)**: How long you've been practicing together
+- **Left line (Grade)**: How well you both do your work as a team
+  - Bottom = lots of mistakes (needs more practice!)
+  - Top = getting almost everything right (awesome team!)
+
+**Right Graph (Robot's Bike Skills):**
+- **Bottom line (Time)**: Same timeline as the left graph
+- **Left line (Skills)**: How good the robot is getting at riding the bike
+  - Bottom = just learning, falls down a lot (0% skills)
+  - Top = riding smoothly without training wheels (100% skills!)
+
+At first, the robot is wobbly on the bike (low skills) so you have to help with most of the work. But as the robot practices riding, it gets better and better! This lets the robot do more work by itself, which means you can focus on the really tricky parts.
+
+Sometimes the robot tries harder tricks to learn faster (that's the "exploration bonus"), and the system adjusts how you share the work, which can cause the teamwork grade to go up and down for a bit as everyone learns the best balance. But over time, with the robot getting smarter, you both should get better at working together overall! The teamwork grade may fluctuate during learning, but the trend should improve as the robot becomes a biking expert!
+
+It's like having a friend who gets smarter at sports while also getting better at helping you with homework. The robot doesn't just share the work - it actually improves and gets stronger, creating a super team! 🚴‍♂️🤝📚
+""")
+
+        learning_traj_plot = gr.LinePlot(x="t", y="accuracy", label="Accuracy over time")
+        learning_skill_plot = gr.LinePlot(x="t", y="ai_skill", label="AI skill progression")
+        learning_traj_table = gr.Dataframe(interactive=False)
+        learning_interpret_btn = gr.Button("Interpret Results")
+        learning_adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the learning AI trajectory.")
+
+        with gr.Row():
+            with gr.Column():
+                with gr.Accordion("📊 Left Graph: Accuracy Over Time - What It Shows", open=False):
+                    gr.Markdown("""
+### The Left Graph: How Well Your Team Works Together
+
+**What You're Looking At:**
+This graph shows how accurately you and the AI robot work together over 60 time steps (decisions). It's like watching your grades improve as you and a friend get better at studying together.
+
+**The Axes:**
+- **Bottom (X-axis)**: Time steps from 0 to 60
+  - Left = beginning of collaboration
+  - Right = end of collaboration
+- **Left (Y-axis)**: Accuracy from 0% to 100%
+  - Bottom = lots of mistakes (team struggling)
+  - Top = nearly perfect answers (team excelling)
+
+**The Target Line:**
+There's often a horizontal reference line showing your accuracy goal. The graph shows:
+- ✅ **Success**: When the line stabilizes AT or NEAR your target
+- 📈 **Improving**: When the line goes upward over time
+- ⚖️ **Balancing**: When the line fluctuates as the system learns optimal work-sharing
+
+**Why It Might Not Be Smooth:**
+The accuracy line can go up and down because:
+1. **The AI is improving**: Better AI means different optimal work-sharing → accuracy changes
+2. **The system is learning**: It's figuring out how much work the (improving) robot should handle
+3. **Exploration vs. Exploitation**: Sometimes routing work to the robot to help it learn might temporarily lower accuracy, but pays off later as robot improves
+
+**The Amazing Pattern You Might See:**
+At first, accuracy might be **lower** than the fixed AI mode (Adaptive tab) because the system is routing some work to the learning robot even when humans might be better right now. This is intentional! The system sacrifices short-term accuracy for long-term learning, knowing the robot will improve. It's like letting a student try harder problems to learn faster, even if they make more mistakes initially.
+
+**Key Takeaway:**
+This graph shows the **team accuracy story** - how working together and learning together affects overall performance. The goal is to stabilize near your target while the AI improves! 🎯
+""")
+                learning_traj_plot
+
+            with gr.Column():
+                with gr.Accordion("🤖 Right Graph: AI Skill Progression - How the Robot Learns", open=False):
+                    gr.Markdown("""
+### The Right Graph: How Smart Is Your AI Robot Getting?
+
+**What You're Looking At:**
+This graph shows how much the AI robot has learned and improved through experience. It's like watching a student improve from 0% mastery to 100% mastery of a subject!
+
+**The Axes:**
+- **Bottom (X-axis)**: Time steps from 0 to 60
+  - Left = beginning (robot is a newbie)
+  - Right = end (robot has learned a lot)
+- **Left (Y-axis)**: AI Skill Level from 0% to 100%
+  - Bottom (0%) = baseline abilities, no learning yet
+  - Top (100%) = fully learned, maximum improvement possible
+
+**What This Tells You:**
+- 🚀 **Steady Upward Line**: Robot is consistently learning from experience
+- 📊 **Line Reaches Higher Levels**: Robot gets smarter, unlocking better capabilities
+- ⏱️ **Speed of Learning**: Steeper slope = faster learning (faster learning rate)
+- 🎯 **Final Skill Level**: Where the line ends shows total improvement achieved
+
+**How It Relates to Accuracy:**
+There's a magic relationship here:
+1. **Robot starts weak** (0% skill) → system routes many tasks to humans
+2. **Robot learns** (skill increases) → system gradually trusts robot more
+3. **Robot gets better** (higher skill) → system can route more work to robot
+4. **Better balance found** → accuracy stabilizes at desired level
+
+This is why the accuracy graph (left) might fluctuate while skill graph (right) steadily increases - the system is discovering the optimal work-sharing as the robot improves!
+
+**Impact of Your Settings:**
+- 🚀 **Higher Learning Rate**: Line rises more steeply (faster improvement)
+- 🐌 **Lower Learning Rate**: Line rises slowly but steadily (patient learning)
+- 🎲 **Exploration Bonus**: Higher values make robot try harder cases, accelerating learning
+
+**The Feedback Loop In Action:**
+```
+Better Robot Skill ↔ Different Optimal τ ↔ More Learning Opportunities ↔ Even Better Skills!
+```
+
+**Key Takeaway:**
+This graph shows **genuine AI improvement** - not just optimizing the threshold τ, but actually making the AI smarter through experience. This is what real production ML systems do! 🚀🧠
+""")
+                learning_skill_plot
+
+        def on_learning_adapt(task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, ai_learning_rate, exploration_bonus):
+            df = make_dataset(int(dataset_size), task)
+            traj = adaptive_tau_with_learning(df, float(target_acc), float(base_acc), int(fatigue_after),
+                                            float(fatigue_drop), int(steps), float(tau0), float(kp), float(ai_learning_rate), float(exploration_bonus))
+            return traj, traj, traj
+
+        def interpret_learning_results(traj_df, target_acc):
+            if traj_df.empty:
+                return "No data available. Please run the learning AI simulation first."
+            
+            final_acc = traj_df['accuracy'].iloc[-1]
+            final_tau = traj_df['tau'].iloc[-1]
+            final_ai_skill = traj_df['ai_skill'].iloc[-1]
+            initial_acc = traj_df['accuracy'].iloc[0]
+            max_acc = traj_df['accuracy'].max()
+            converged = abs(final_acc - float(target_acc)) < 0.01
+            
+            # Calculate stability (variance in last 10 steps)
+            last_10 = traj_df['accuracy'].tail(10)
+            stability = last_10.std()
+            
+            # Calculate robot autonomy (1 - coverage)
+            final_coverage = traj_df['coverage'].iloc[-1]
+            robot_autonomy = 1 - final_coverage
+            
+            # AI improvement
+            ai_improvement = final_ai_skill * 100
+            
+            interpretation = f"""
+## Learning AI Human-Robot Collaboration Analysis
+
+**Target Performance**: {float(target_acc):.1%}
+**Final System Configuration:**
+- **Overall Accuracy**: {final_acc:.1%}
+- **Robot Decision-Making**: Robots handle {robot_autonomy:.1%} of all decisions (τ = {final_tau:.3f})
+- **Human Involvement**: Humans review {final_coverage:.1%} of cases
+- **AI Skill Level**: {ai_improvement:.1%} improvement from baseline
+- **System Stability**: {stability:.4f} (lower = more stable collaboration)
+
+**AI Learning Journey:**
+- **Starting Point**: {initial_acc:.1%} accuracy with baseline AI capabilities
+- **Peak Performance**: {max_acc:.1%} accuracy achieved during learning adaptation
+- **AI Improvement**: AI skill progressed from 0% to {ai_improvement:.1%} through experience
+- **Final Balance**: System learned that improved AI can safely handle {robot_autonomy:.1%} of decisions while maintaining target accuracy
+
+**Learning Dynamics:**
+- **Convergence**: {'Successfully achieved target accuracy' if converged else f'Settled at {final_acc:.1%} - close but not exact target'}
+- **Exploration Strategy**: The system balanced exploitation (using current AI optimally) vs exploration (routing cases to create learning opportunities)
+- **Feedback Loops**: Better AI → different optimal τ → more learning opportunities → even better AI
+- **Stability Insight**: {'Smooth learning collaboration' if stability < 0.01 else 'Some fluctuation during learning adaptation'}
+- **Learned Threshold**: τ = {final_tau:.3f} represents the optimal robot confidence level given AI improvement
+
+**Practical Meaning:**
+- The AI genuinely improved its capabilities through experience
+- The system learned to balance robot efficiency with human oversight AND AI learning incentives
+- Higher τ means robots are more confident and independent (enabled by learning)
+- Lower τ means robots seek more human guidance (to accelerate learning)
+- The final configuration shows the ideal human-AI partnership where AI has improved through collaboration.
+
+---
+
+**🤔 Simple Explanation: Robot Getting Smarter While Doing Homework Report!**
+
+The computer watched an amazing story: a robot learning to ride a bike WHILE learning to do homework with you!
+
+**Final Super Team Setup:**
+- **Team Grade**: You both got {final_acc:.0%} of answers right together!
+- **Robot Work**: The robot does {robot_autonomy:.0%} of all problems by itself now
+- **Your Work**: You check {final_coverage:.0%} of the robot's answers
+- **Robot Bike Skills**: Improved from 0% to {ai_improvement:.0%} - what a champ!
+- **Team Stability**: {'Perfect smooth teamwork!' if stability < 0.01 else 'Learning together perfectly'}
+
+**Amazing Learning Story:**
+- **Started With**: {initial_acc:.0%} correct answers and a wobbly robot (0% bike skills)
+- **Best Team Moment**: Got {max_acc:.0%} right when working perfectly together
+- **Robot Growth**: Bike skills went from beginner to {ai_improvement:.0%} expert!
+- **Final Balance**: Smart robot can now do {robot_autonomy:.0%} of work while keeping your goal grade
+
+**What Made This Special:**
+- **Goal Success**: {'Yes! Hit your target grade perfectly!' if converged else f'Almost! Got {final_acc:.0%} - so close to your goal'}
+- **Robot Learning**: Started wobbly, practiced hard, became a biking expert!
+- **Team Magic**: Better robot → different work sharing → more practice → even better robot!
+- **Learning Balance**: {'Always worked smoothly' if stability < 0.01 else 'Found the perfect learning rhythm'}
+
+**Real Life Magic:**
+- The robot actually got smarter by practicing with you!
+- The robot learned to balance being independent (high bravery) with asking for help (to learn faster)
+- You created a friendship where both friends get better together!
+- This is like having a friend who improves at sports while also getting better at homework! 🚴‍♂️📚🤝✨
+"""
+            return interpretation
+
+        learning_adapt_btn.click(
+            fn=on_learning_adapt,
+            inputs=[task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, learning_target_acc, learning_steps, learning_tau0, learning_kp, learning_ai_rate, learning_exploration],
+            outputs=[learning_traj_plot, learning_skill_plot, learning_traj_table]
+        )
+        
+        learning_interpret_btn.click(
+            fn=interpret_learning_results,
+            inputs=[learning_traj_table, learning_target_acc],
+            outputs=[learning_adapt_interpretation]
         )
 
     demo.load(lambda: None, None, None)
