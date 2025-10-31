@@ -112,6 +112,90 @@ This dynamic thresholding system has broad applications in domains requiring hig
 This framework supports the transition to more integrated human-AI workflows, enhancing productivity and decision quality across industries.
 """)
 
+    with gr.Accordion("Real-World Deployment: Data-Driven Parameter Optimization", open=False):
+        gr.Markdown("""
+In real-world deployment of a dynamic confidence thresholding system like Plan B, data-driven parameter optimization would involve using empirical data from actual human-AI collaboration to fine-tune system parameters for optimal performance. Here's how this would work:
+
+## Data Collection Phase
+1. **Deploy the system** in a pilot environment (e.g., medical diagnosis workflow or legal document review)
+2. **Log comprehensive data** for each decision:
+   - AI confidence scores and predictions
+   - Human expert decisions and response times
+   - Ground truth outcomes (when available)
+   - Task complexity metrics
+   - Human fatigue indicators (if trackable)
+
+## Parameter Optimization Framework
+
+### 1. Static Threshold Optimization (τ)
+- **Historical Analysis**: Use logged data to compute empirical coverage-accuracy curves
+- **Optimization Objective**: Maximize a utility function combining accuracy, cost, and human workload
+- **Methods**:
+  - Grid search across τ values (0.0 to 1.0)
+  - Statistical modeling to fit curves and find optimal points
+  - A/B testing different τ values in production
+
+### 2. Adaptive Controller Tuning
+- **Feedback Loop Analysis**: Analyze how the adaptive system performed over time
+- **Parameter Tuning**:
+  - **Target Accuracy**: Set based on domain requirements (e.g., 95% for medical, 90% for legal)
+  - **Proportional Gain (k_p)**: Optimize responsiveness vs. stability using control theory
+  - **Time Windows**: Determine optimal adaptation frequency
+
+### 3. Human Performance Modeling
+- **Fatigue Parameters**: Use time-series data to model human accuracy degradation
+- **Base Accuracy Calibration**: Update based on expert performance metrics
+- **Workload Balancing**: Optimize task distribution patterns
+
+## Implementation Approaches
+
+### Statistical Optimization
+```python
+# Example: Finding optimal τ using historical data
+def optimize_threshold(historical_data):
+    results = []
+    for tau in np.arange(0.0, 1.0, 0.01):
+        coverage, accuracy = evaluate_tau(historical_data, tau)
+        cost = calculate_cost(coverage, accuracy)
+        results.append((tau, coverage, accuracy, cost))
+    
+    # Find τ that minimizes cost while meeting accuracy threshold
+    optimal = min(results, key=lambda x: x[3] if x[2] >= target_acc else float('inf'))
+    return optimal[0]
+```
+
+### Machine Learning-Based Optimization
+- **Reinforcement Learning**: Train agents to learn optimal τ policies
+- **Bayesian Optimization**: Efficiently search parameter space
+- **Contextual Bandits**: Adapt τ based on task features
+
+## Validation and Monitoring
+
+### Continuous Evaluation
+- **Performance Metrics**: Track accuracy, coverage, human workload over time
+- **Drift Detection**: Monitor for changes in AI performance or human behavior
+- **A/B Testing**: Compare optimized vs. baseline systems
+
+### Safety Constraints
+- **Minimum Accuracy**: Never drop below critical thresholds
+- **Maximum Coverage**: Ensure human experts aren't overwhelmed
+- **Fallback Mechanisms**: Default to human-only decisions during uncertainty
+
+## Real-World Examples
+
+### Healthcare Deployment
+- **Data Source**: Radiology reports with AI assistance
+- **Optimization**: Balance diagnostic accuracy with radiologist workload
+- **Outcome**: 30-50% reduction in human review time while maintaining 95%+ accuracy
+
+### Legal Review System
+- **Data Source**: Contract analysis with AI pre-screening
+- **Optimization**: Minimize false negatives while controlling lawyer hours
+- **Outcome**: 60% efficiency gain with improved compliance detection
+
+This data-driven approach transforms the simulation tool into a production-ready system that continuously improves through real-world feedback, ensuring optimal human-AI collaboration for specific domains and operational constraints. 🚀📊
+""")
+
     with gr.Accordion("Technology Stack", open=False):
         gr.Markdown("""
 ### Core Technologies
@@ -253,90 +337,6 @@ Play around with the sliders and see what happens! It's like training a robot te
         tmax = gr.Slider(0.0, 1.0, value=1.0, step=0.02, label="τ max")
         tstep = gr.Slider(0.01, 0.2, value=0.02, step=0.01, label="τ step")
         sweep_btn = gr.Button("Compute Curve")
-
-        with gr.Accordion("Real-World Deployment: Data-Driven Parameter Optimization", open=False):
-            gr.Markdown("""
-In real-world deployment of a dynamic confidence thresholding system like Plan B, data-driven parameter optimization would involve using empirical data from actual human-AI collaboration to fine-tune system parameters for optimal performance. Here's how this would work:
-
-## Data Collection Phase
-1. **Deploy the system** in a pilot environment (e.g., medical diagnosis workflow or legal document review)
-2. **Log comprehensive data** for each decision:
-   - AI confidence scores and predictions
-   - Human expert decisions and response times
-   - Ground truth outcomes (when available)
-   - Task complexity metrics
-   - Human fatigue indicators (if trackable)
-
-## Parameter Optimization Framework
-
-### 1. Static Threshold Optimization (τ)
-- **Historical Analysis**: Use logged data to compute empirical coverage-accuracy curves
-- **Optimization Objective**: Maximize a utility function combining accuracy, cost, and human workload
-- **Methods**:
-  - Grid search across τ values (0.0 to 1.0)
-  - Statistical modeling to fit curves and find optimal points
-  - A/B testing different τ values in production
-
-### 2. Adaptive Controller Tuning
-- **Feedback Loop Analysis**: Analyze how the adaptive system performed over time
-- **Parameter Tuning**:
-  - **Target Accuracy**: Set based on domain requirements (e.g., 95% for medical, 90% for legal)
-  - **Proportional Gain (k_p)**: Optimize responsiveness vs. stability using control theory
-  - **Time Windows**: Determine optimal adaptation frequency
-
-### 3. Human Performance Modeling
-- **Fatigue Parameters**: Use time-series data to model human accuracy degradation
-- **Base Accuracy Calibration**: Update based on expert performance metrics
-- **Workload Balancing**: Optimize task distribution patterns
-
-## Implementation Approaches
-
-### Statistical Optimization
-```python
-# Example: Finding optimal τ using historical data
-def optimize_threshold(historical_data):
-    results = []
-    for tau in np.arange(0.0, 1.0, 0.01):
-        coverage, accuracy = evaluate_tau(historical_data, tau)
-        cost = calculate_cost(coverage, accuracy)
-        results.append((tau, coverage, accuracy, cost))
-    
-    # Find τ that minimizes cost while meeting accuracy threshold
-    optimal = min(results, key=lambda x: x[3] if x[2] >= target_acc else float('inf'))
-    return optimal[0]
-```
-
-### Machine Learning-Based Optimization
-- **Reinforcement Learning**: Train agents to learn optimal τ policies
-- **Bayesian Optimization**: Efficiently search parameter space
-- **Contextual Bandits**: Adapt τ based on task features
-
-## Validation and Monitoring
-
-### Continuous Evaluation
-- **Performance Metrics**: Track accuracy, coverage, human workload over time
-- **Drift Detection**: Monitor for changes in AI performance or human behavior
-- **A/B Testing**: Compare optimized vs. baseline systems
-
-### Safety Constraints
-- **Minimum Accuracy**: Never drop below critical thresholds
-- **Maximum Coverage**: Ensure human experts aren't overwhelmed
-- **Fallback Mechanisms**: Default to human-only decisions during uncertainty
-
-## Real-World Examples
-
-### Healthcare Deployment
-- **Data Source**: Radiology reports with AI assistance
-- **Optimization**: Balance diagnostic accuracy with radiologist workload
-- **Outcome**: 30-50% reduction in human review time while maintaining 95%+ accuracy
-
-### Legal Review System
-- **Data Source**: Contract analysis with AI pre-screening
-- **Optimization**: Minimize false negatives while controlling lawyer hours
-- **Outcome**: 60% efficiency gain with improved compliance detection
-
-This data-driven approach transforms the simulation tool into a production-ready system that continuously improves through real-world feedback, ensuring optimal human-AI collaboration for specific domains and operational constraints. 🚀📊
-""")
 
         with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
             gr.Markdown("""
