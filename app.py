@@ -375,6 +375,23 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
         kp = gr.Slider(0.05, 1.0, value=0.3, step=0.05, label="Proportional gain k_p")
         adapt_btn = gr.Button("Run Adaptive")
 
+        with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
+            gr.Markdown("""
+Imagine the graph is like a movie showing how a smart robot learns to work better with people over time!
+
+- The **x-axis** (bottom) is "Time Steps." It shows how many rounds of practice the system has done. Each step is like one more task the robot tries.
+
+- The **y-axis** (side) is "Accuracy." It shows how many answers are right at each time step. Higher up means more correct answers, like getting better scores as you practice.
+
+- The line shows how the system's accuracy changes over time. It starts at some level and tries to reach the target accuracy you set (like aiming for 90% right).
+
+- Behind the scenes, the robot adjusts its "bravery level" (τ) based on how well it's doing. If accuracy is too low, it asks for more help from people. If it's doing well, it tries to do more on its own.
+
+- Watch how the accuracy bounces around at first but settles toward your target. It's like training a robot to find the perfect balance between working alone and asking for help!
+
+This shows real-time learning – the system adapts as it goes, getting smarter about when to use robots vs. people. Cool, right? 🤖📈
+""")
+
         traj_plot = gr.LinePlot(x="t", y="accuracy", label="Adaptive trajectory")
         traj_table = gr.Dataframe(interactive=False)
 
