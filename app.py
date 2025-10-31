@@ -53,16 +53,31 @@ def sweep_curve(df, base_acc, fatigue_after, fatigue_drop, tmin=0.0, tmax=1.0, s
         rows.append({"tau": tau, "coverage": cov, "accuracy": acc})
     return pd.DataFrame(rows)
 
-def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.3, optimization_mode="balanced"):
+def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.3, optimization_mode="balanced", task_domain="radiology"):
     """
-    Adaptive thresholding with different optimization modes:
+    Adaptive thresholding with different optimization modes and domain-specific scenarios:
     - "balanced": Find optimal trade-off between accuracy and human workload
     - "accuracy_priority": Prioritize accuracy over workload reduction
     - "efficiency_priority": Prioritize workload reduction while maintaining minimum accuracy
     - "robot_maximum": Maximize robot autonomy with minimal accuracy constraints
+    - "domain_recommended": Use domain-specific optimization mode
+    
+    Domain-specific recommendations:
+    - Radiology: accuracy_priority (medical safety critical)
+    - Legal: balanced (cost vs accuracy trade-off)
+    - Code: efficiency_priority (faster iteration cycles)
     """
     tau = tau0
     traj = []
+    
+    # Domain-specific optimization mode recommendations
+    if optimization_mode == "domain_recommended":
+        domain_modes = {
+            "radiology": "accuracy_priority",  # Medical safety critical
+            "legal": "balanced",              # Cost vs accuracy trade-off
+            "code": "efficiency_priority"     # Faster development cycles
+        }
+        optimization_mode = domain_modes.get(task_domain, "balanced")
     
     # Define optimization weights based on mode
     if optimization_mode == "accuracy_priority":
@@ -334,6 +349,8 @@ Here's what the buttons and sliders do, explained super simply:
 
 - **Task Domain**: Pick what kind of job the robots are doing, like checking pictures for doctors (radiology), reading legal papers, or looking at computer code. It's like choosing different levels in a game.
 
+- **Domain Confidence Level**: How confident the AI is in this specific domain. Lower values mean AI needs more human help, higher values mean AI can work more independently. This affects how the optimization modes work.
+
 - **Dataset Size**: How many pretend tasks to try. Bigger numbers mean more practice, like doing 100 math problems instead of 10.
 
 - **Human Base Accuracy**: How good the humans are at first. Slide it up for super-smart humans, down for ones who make more mistakes.
@@ -353,6 +370,7 @@ In the "Adaptive τ Controller" tab:
 - **Initial τ**: Starting bravery level.
 - **Proportional Gain k_p**: How fast the system learns to adjust. Higher means it changes quicker.
 - **Optimization Mode**: Choose how the system balances accuracy vs. efficiency:
+  - **Domain Recommended**: Automatically selects the best optimization mode for your chosen task domain
   - **Balanced**: Finds the best trade-off between accuracy and human workload
   - **Accuracy Priority**: Focuses on maximizing system reliability (may use more humans)
   - **Efficiency Priority**: Focuses on minimizing human workload (maintains acceptable accuracy)
@@ -364,6 +382,8 @@ Play around with the sliders and see what happens! It's like training a robot te
 
     with gr.Row():
         task = gr.Dropdown(["radiology", "legal", "code"], value="radiology", label="Task domain")
+        domain_confidence = gr.Slider(0.1, 0.9, value=0.5, step=0.1, label="Domain confidence level",
+                                     info="How confident AI is in this domain (affects optimization)")
         dataset_size = gr.Slider(300, 5000, value=1500, step=100, label="Dataset size")
         base_acc = gr.Slider(0.6, 0.99, value=0.85, step=0.01, label="Human base accuracy")
         fatigue_after = gr.Slider(20, 200, value=60, step=5, label="Fatigue after N tasks")
@@ -449,10 +469,10 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
         tau0 = gr.Slider(0.0, 1.0, value=0.5, step=0.01, label="Initial τ")
         kp = gr.Slider(0.05, 1.0, value=0.3, step=0.05, label="Proportional gain k_p")
         optimization_mode = gr.Dropdown(
-            ["balanced", "accuracy_priority", "efficiency_priority", "robot_maximum"], 
-            value="balanced", 
+            ["domain_recommended", "balanced", "accuracy_priority", "efficiency_priority", "robot_maximum"], 
+            value="domain_recommended", 
             label="Optimization mode",
-            info="Balanced: optimal trade-off | Accuracy: prioritize reliability | Efficiency: minimize human workload | Robot Maximum: maximize robot autonomy"
+            info="Domain Recommended: Use best practice for selected task | Balanced: optimal trade-off | Accuracy: prioritize reliability | Efficiency: minimize human workload | Robot Maximum: maximize robot autonomy"
         )
         adapt_btn = gr.Button("Run Adaptive")
 
@@ -478,10 +498,10 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
         interpret_adapt_btn = gr.Button("Interpret Results")
         adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the adaptive trajectory.")
 
-        def on_adapt(task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode):
+        def on_adapt(task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode):
             df = make_dataset(int(dataset_size), task)
             traj = adaptive_tau(df, float(target_acc), float(base_acc), int(fatigue_after),
-                                float(fatigue_drop), int(steps), float(tau0), float(kp), optimization_mode)
+                                float(fatigue_drop), int(steps), float(tau0), float(kp), optimization_mode, task)
             return traj[["t","accuracy","tau"]], traj
 
         def interpret_adapt_results(traj_df, target_acc, optimization_mode):
@@ -504,6 +524,7 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
             robot_autonomy = 1 - final_coverage
             
             mode_descriptions = {
+                "domain_recommended": "Domain-specific optimization (uses best practices for selected task domain)",
                 "balanced": "Balanced optimization (optimal trade-off between accuracy and workload)",
                 "accuracy_priority": "Accuracy priority (maximizes system reliability)",
                 "efficiency_priority": "Efficiency priority (minimizes human workload while maintaining acceptable accuracy)",
@@ -542,7 +563,7 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
 
         adapt_btn.click(
             fn=on_adapt,
-            inputs=[task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode],
+            inputs=[task, domain_confidence, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode],
             outputs=[traj_plot, traj_table]
         )
         
