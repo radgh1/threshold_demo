@@ -53,14 +53,46 @@ def sweep_curve(df, base_acc, fatigue_after, fatigue_drop, tmin=0.0, tmax=1.0, s
         rows.append({"tau": tau, "coverage": cov, "accuracy": acc})
     return pd.DataFrame(rows)
 
-def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.3):
+def adaptive_tau(df, target_acc, base_acc, fatigue_after, fatigue_drop, steps=60, tau0=0.5, k_p=0.3, optimization_mode="balanced"):
+    """
+    Adaptive thresholding with different optimization modes:
+    - "balanced": Find optimal trade-off between accuracy and human workload
+    - "accuracy_priority": Prioritize accuracy over workload reduction
+    - "efficiency_priority": Prioritize workload reduction while maintaining minimum accuracy
+    - "robot_maximum": Maximize robot autonomy with minimal accuracy constraints
+    """
     tau = tau0
     traj = []
+    
+    # Define optimization weights based on mode
+    if optimization_mode == "accuracy_priority":
+        accuracy_weight = 1.0
+        workload_weight = 0.0
+    elif optimization_mode == "efficiency_priority":
+        accuracy_weight = 0.3  # Still maintain some accuracy
+        workload_weight = 0.7
+    elif optimization_mode == "robot_maximum":
+        accuracy_weight = 0.1  # Minimal accuracy constraint
+        workload_weight = 0.9  # Maximize robot usage
+    else:  # "balanced"
+        accuracy_weight = 0.6
+        workload_weight = 0.4
+    
     for t in range(steps):
         cov, acc = coverage_accuracy(df, tau, base_acc, fatigue_after, fatigue_drop)
-        err = target_acc - acc
-        # proportional controller: if acc < target -> increase human routing (raise tau)
-        tau = np.clip(tau + k_p*err, 0.0, 1.0)
+        
+        # Multi-objective optimization: balance accuracy vs workload reduction
+        acc_error = target_acc - acc
+        workload_penalty = cov  # Higher coverage = higher human workload
+        
+        # Combined error term: positive = increase tau (more humans), negative = decrease tau (more robots)
+        combined_error = accuracy_weight * acc_error - workload_weight * workload_penalty
+        
+        # Adjust tau to minimize combined error
+        # If combined_error > 0, increase tau (more humans to improve accuracy)
+        # If combined_error < 0, decrease tau (more robots to reduce workload)
+        tau = np.clip(tau + k_p * combined_error, 0.0, 1.0)
+        
         traj.append({"t": t, "tau": tau, "coverage": cov, "accuracy": acc})
     return pd.DataFrame(traj)
 
@@ -320,7 +352,12 @@ In the "Adaptive τ Controller" tab:
 - **Steps**: How many tries to get better.
 - **Initial τ**: Starting bravery level.
 - **Proportional Gain k_p**: How fast the system learns to adjust. Higher means it changes quicker.
-- **Run Adaptive**: Press to watch the bravery level change over time to hit your accuracy goal.
+- **Optimization Mode**: Choose how the system balances accuracy vs. efficiency:
+  - **Balanced**: Finds the best trade-off between accuracy and human workload
+  - **Accuracy Priority**: Focuses on maximizing system reliability (may use more humans)
+  - **Efficiency Priority**: Focuses on minimizing human workload (maintains acceptable accuracy)
+  - **Robot Maximum**: Maximizes robot decision-making autonomy (robots handle as much as possible)
+- **Run Adaptive**: Press to watch the bravery level change over time to optimize your chosen goal.
 
 Play around with the sliders and see what happens! It's like training a robot team. 😊
 """)
@@ -411,6 +448,12 @@ It's like balancing a seesaw – too much on one side, and it tips! Play with th
         steps = gr.Slider(5, 200, value=60, step=5, label="Steps")
         tau0 = gr.Slider(0.0, 1.0, value=0.5, step=0.01, label="Initial τ")
         kp = gr.Slider(0.05, 1.0, value=0.3, step=0.05, label="Proportional gain k_p")
+        optimization_mode = gr.Dropdown(
+            ["balanced", "accuracy_priority", "efficiency_priority", "robot_maximum"], 
+            value="balanced", 
+            label="Optimization mode",
+            info="Balanced: optimal trade-off | Accuracy: prioritize reliability | Efficiency: minimize human workload | Robot Maximum: maximize robot autonomy"
+        )
         adapt_btn = gr.Button("Run Adaptive")
 
         with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
@@ -435,13 +478,13 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
         interpret_adapt_btn = gr.Button("Interpret Results")
         adapt_interpretation = gr.Markdown("Click 'Interpret Results' to analyze the adaptive trajectory.")
 
-        def on_adapt(task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp):
+        def on_adapt(task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode):
             df = make_dataset(int(dataset_size), task)
             traj = adaptive_tau(df, float(target_acc), float(base_acc), int(fatigue_after),
-                                float(fatigue_drop), int(steps), float(tau0), float(kp))
+                                float(fatigue_drop), int(steps), float(tau0), float(kp), optimization_mode)
             return traj[["t","accuracy","tau"]], traj
 
-        def interpret_adapt_results(traj_df, target_acc):
+        def interpret_adapt_results(traj_df, target_acc, optimization_mode):
             if traj_df.empty:
                 return "No data available. Please run the adaptive simulation first."
             
@@ -460,9 +503,17 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
             final_coverage = traj_df['coverage'].iloc[-1]
             robot_autonomy = 1 - final_coverage
             
+            mode_descriptions = {
+                "balanced": "Balanced optimization (optimal trade-off between accuracy and workload)",
+                "accuracy_priority": "Accuracy priority (maximizes system reliability)",
+                "efficiency_priority": "Efficiency priority (minimizes human workload while maintaining acceptable accuracy)",
+                "robot_maximum": "Robot maximum autonomy (maximizes robot decision-making with minimal accuracy constraints)"
+            }
+            
             interpretation = f"""
 ## Adaptive Human-Robot Collaboration Analysis
 
+**Optimization Mode**: {mode_descriptions.get(optimization_mode, optimization_mode)}
 **Target Performance**: {float(target_acc):.1%}
 **Final System Configuration:**
 - **Overall Accuracy**: {final_acc:.1%}
@@ -491,13 +542,13 @@ This shows real-time learning – the system adapts as it goes, getting smarter 
 
         adapt_btn.click(
             fn=on_adapt,
-            inputs=[task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp],
+            inputs=[task, dataset_size, base_acc, fatigue_after, fatigue_drop, target_acc, steps, tau0, kp, optimization_mode],
             outputs=[traj_plot, traj_table]
         )
         
         interpret_adapt_btn.click(
             fn=interpret_adapt_results,
-            inputs=[traj_table, target_acc],
+            inputs=[traj_table, target_acc, optimization_mode],
             outputs=[adapt_interpretation]
         )
 
