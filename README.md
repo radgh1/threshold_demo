@@ -14,6 +14,7 @@ short_description: Interactive simulation of AI confidence thresholds for human-
 
 **Human-AI Collaboration** - An interactive simulation that shows how AI systems can work perfectly with humans by learning when to ask for help!
 
+[![Live Demo](https://img.shields.io/badge/🚀-Live_Demo-00ADD8)](https://huggingface.co/spaces/raddev1/threshold_demo)
 [![GitHub](https://img.shields.io/badge/GitHub-Repository-181717)](https://github.com/radgh1/threshold_demo)
 
 ## 🎯 What This App Does
@@ -122,6 +123,9 @@ For each task, AI provides: **"My answer is X, and I'm Y% confident"**
 
 ## 🚀 Getting Started
 
+### **Online Demo**
+Visit the [live demo](https://huggingface.co/spaces/raddev1/threshold_demo) to try it right now!
+
 ### **Local Installation**
 ```bash
 # Clone the repository
@@ -204,4 +208,4 @@ Built with:
 
 **Ready to see how AI and humans can work together perfectly?** 🚀🤖👥
 
-[Try It Now!](https://github.com/radgh1/threshold_demo)
+[Try the Live Demo Now!](https://huggingface.co/spaces/raddev1/threshold_demo)
