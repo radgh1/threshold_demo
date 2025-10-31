@@ -338,6 +338,21 @@ Play around with the sliders and see what happens! It's like training a robot te
         tstep = gr.Slider(0.01, 0.2, value=0.02, step=0.01, label="τ step")
         sweep_btn = gr.Button("Compute Curve")
 
+        with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
+            gr.Markdown("""
+Imagine the graph is like a treasure map showing how well robots and people work together on tasks!
+
+- The **x-axis** (bottom) is called "Coverage." It shows how much of the work the people do. If it's 0, robots do everything alone. If it's 1, people check everything. It's like how much help the robots ask for.
+
+- The **y-axis** (side) is "Accuracy." It shows how many answers are right. Higher up means more correct answers, like getting a good score on a test.
+
+- The curve connects points for different "bravery levels" (called τ). It starts from low τ (robots ask for lots of help, high coverage) on the left, to high τ (robots try to do more on their own, low coverage) on the right.
+
+The graph helps you see the trade-off: more robot work (moving right on the curve) might make fewer mistakes (higher accuracy) if robots are smart, but if robots mess up, you need more people to help (moving left) to get things right.
+
+It's like balancing a seesaw – too much on one side, and it tips! Play with the sliders to see how the curve changes. Cool, right? 😊
+""")
+
         curve_plot = gr.LinePlot(x="coverage", y="accuracy", label="Coverage–Accuracy Curve")
         curve_table = gr.Dataframe(interactive=False)
 
@@ -359,21 +374,6 @@ Play around with the sliders and see what happens! It's like training a robot te
         tau0 = gr.Slider(0.0, 1.0, value=0.5, step=0.01, label="Initial τ")
         kp = gr.Slider(0.05, 1.0, value=0.3, step=0.05, label="Proportional gain k_p")
         adapt_btn = gr.Button("Run Adaptive")
-
-        with gr.Accordion("Understanding the Graph (Simple Explanation)", open=False):
-            gr.Markdown("""
-Imagine the graph is like a treasure map showing how well robots and people work together on tasks!
-
-- The **x-axis** (bottom) is called "Coverage." It shows how much of the work the people do. If it's 0, robots do everything alone. If it's 1, people check everything. It's like how much help the robots ask for.
-
-- The **y-axis** (side) is "Accuracy." It shows how many answers are right. Higher up means more correct answers, like getting a good score on a test.
-
-- The curve connects points for different "bravery levels" (called τ). It starts from low τ (robots ask for lots of help, high coverage) on the left, to high τ (robots try to do more on their own, low coverage) on the right.
-
-The graph helps you see the trade-off: more robot work (moving right on the curve) might make fewer mistakes (higher accuracy) if robots are smart, but if robots mess up, you need more people to help (moving left) to get things right.
-
-It's like balancing a seesaw – too much on one side, and it tips! Play with the sliders to see how the curve changes. Cool, right? 😊
-""")
 
         traj_plot = gr.LinePlot(x="t", y="accuracy", label="Adaptive trajectory")
         traj_table = gr.Dataframe(interactive=False)
